@@ -7,8 +7,52 @@ from streamlit_mermaid import st_mermaid
 import io
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+import google.generativeai as genai
+
+# Librerías para generación de Word (.docx)
+from docx import Document
+from docx.shared import Inches, Pt, RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml import parse_xml, OxmlElement
+from docx.oxml.ns import nsdecls, qn
 
 st.set_page_config(page_title="MatrixDevTesis", layout="wide", page_icon="🎓")
+
+# ==========================================
+# CONFIGURACIÓN SIDEBAR (API KEY DE IA)
+# ==========================================
+st.sidebar.title("⚙️ Configuración")
+api_key = st.sidebar.text_input("🔑 API Key de Google Gemini", type="password", help="Obtén tu clave gratis en Google AI Studio")
+
+# Función auxiliar para llamar a la IA
+def mejorar_texto_con_ia(texto_original, tipo_campo, key):
+    if not key:
+        st.sidebar.error("⚠️ Ingresa una API Key de Gemini en la barra lateral para usar la IA.")
+        return texto_original
+    if not texto_original or texto_original.strip() == "":
+        return texto_original
+        
+    try:
+        genai.configure(api_key=key)
+        model = genai.GenerativeModel("gemini-2.5-flash")
+        
+        prompt = f"""
+        Eres un Ingeniero de Software Senior y revisor de memorias de título/tesis universitarias.
+        Reescribe y mejora el siguiente borrador de texto para la sección '{tipo_campo}' de un documento de Especificación de Requisitos de Software (ERS).
+        
+        Instrucciones:
+        - Transforma cualquier idea informal, vaga o mal redactada en un lenguaje sumamente profesional, técnico, formal y claro.
+        - Mantén la intención original del usuario pero exprésala con estándares de la IEEE / Ingeniería de Software.
+        - Devuelve ÚNICAMENTE el texto mejorado final, sin introducciones, saludos ni explicaciones.
+
+        Borrador original:
+        "{texto_original}"
+        """
+        response = model.generate_content(prompt)
+        return response.text.strip()
+    except Exception as e:
+        st.error(f"Error al conectar con la IA: {str(e)}")
+        return texto_original
 
 st.title("🎓 MatrixDevTesis")
 st.caption("Suite web all-in-one para la gestión, modelado y documentación de proyectos informáticos.")
@@ -26,12 +70,34 @@ tab1, tab2, tab3, tab4 = st.tabs([
 with tab1:
     st.subheader("📋 Documentación Base, Requerimientos e Historias de Usuario")
     
+    # Session States para los textos editables por IA
+    if "nombre_proj" not in st.session_state:
+        st.session_state.nombre_proj = "Sistema de Control de Inventario MatrixDev"
+    if "objetivo_text" not in st.session_state:
+        st.session_state.objetivo_text = "Automatizar el flujo de inventario y optimizar la generación de reportes universitarios."
+    if "mvp_text" not in st.session_state:
+        st.session_state.mvp_text = "Módulo de autenticación, gestión CRUD de productos y exportación del documento ERS."
+
     col_acta1, col_acta2 = st.columns([1, 1])
     
     with col_acta1:
-        nombre_proj = st.text_input("Nombre del Proyecto", "Sistema de Control de Inventario MatrixDev")
-        objetivo = st.text_area("Objetivo Principal del Sistema", "Automatizar el flujo de inventario y optimizar la generación de reportes universitarios.", height=100)
-        mvp_scope = st.text_area("Alcance MVP (Producto Mínimo Viable)", "Módulo de autenticación, gestión CRUD de productos y exportación del documento ERS.", height=100)
+        st.session_state.nombre_proj = st.text_input("Nombre del Proyecto", st.session_state.nombre_proj)
+        
+        # Objetivo con botón de IA
+        st.write("**Objetivo Principal del Sistema**")
+        st.session_state.objetivo_text = st.text_area("Objetivo", st.session_state.objetivo_text, height=100, label_visibility="collapsed")
+        if st.button("✨ Mejorar Objetivo con IA", key="btn_ai_obj"):
+            with st.spinner("Optimizando redacción con IA..."):
+                st.session_state.objetivo_text = mejorar_texto_con_ia(st.session_state.objetivo_text, "Objetivo Principal", api_key)
+                st.rerun()
+
+        # Alcance MVP con botón de IA
+        st.write("**Alcance MVP (Producto Mínimo Viable)**")
+        st.session_state.mvp_text = st.text_area("Alcance", st.session_state.mvp_text, height=100, label_visibility="collapsed")
+        if st.button("✨ Mejorar Alcance MVP con IA", key="btn_ai_mvp"):
+            with st.spinner("Optimizando redacción con IA..."):
+                st.session_state.mvp_text = mejorar_texto_con_ia(st.session_state.mvp_text, "Alcance MVP", api_key)
+                st.rerun()
 
     if "df_rf" not in st.session_state:
         st.session_state.df_rf = pd.DataFrame([
@@ -86,19 +152,141 @@ with tab1:
     st.markdown("---")
     st.subheader("📥 Exportación de Entregables")
     
-    # Generador de Excel Estilizado Requerimientos
+    # ---------------------------------------------------------
+    # GENERADOR DE DOCUMENTO WORD (.DOCX)
+    # ---------------------------------------------------------
+    def generar_word_ers(nombre_proyecto, objetivo, alcance, df_rf, df_rnf, df_us):
+        doc = Document()
+        
+        # Margenes estándar de 2.5 cm
+        sections = doc.sections
+        for section in sections:
+            section.top_margin = Inches(1)
+            section.bottom_margin = Inches(1)
+            section.left_margin = Inches(1)
+            section.right_margin = Inches(1)
+
+        # Función auxiliar para formatear encabezados de tabla
+        def set_cell_background(cell, fill_hex):
+            tcPr = cell._element.get_or_add_tcPr()
+            shd = parse_xml(f'<w:shd {nsdecls("w")} w:fill="{fill_hex}"/>')
+            tcPr.append(shd)
+
+        # 1. TÍTULO PRINCIPAL
+        title_p = doc.add_paragraph()
+        title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run_title = title_p.add_run(f"ESPECIFICACIÓN DE REQUISITOS DE SOFTWARE (ERS)\n")
+        run_title.bold = True
+        run_title.font.size = Pt(18)
+        run_title.font.color.rgb = RGBColor(31, 78, 120)
+
+        run_sub = title_p.add_run(f"Proyecto: {nombre_proyecto}")
+        run_sub.italic = True
+        run_sub.font.size = Pt(13)
+        run_sub.font.color.rgb = RGBColor(89, 89, 89)
+
+        doc.add_paragraph().paragraph_format.space_after = Pt(12)
+
+        # 2. OBJETIVO DEL SISTEMA
+        h1 = doc.add_heading("1. Objetivo Principal del Sistema", level=1)
+        h1.style.font.color.rgb = RGBColor(31, 78, 120)
+        p_obj = doc.add_paragraph(objetivo)
+        p_obj.paragraph_format.space_after = Pt(12)
+
+        # 3. ALCANCE DEL MVP
+        h2 = doc.add_heading("2. Alcance del Producto Mínimo Viable (MVP)", level=1)
+        h2.style.font.color.rgb = RGBColor(31, 78, 120)
+        p_mvp = doc.add_paragraph(alcance)
+        p_mvp.paragraph_format.space_after = Pt(12)
+
+        # 4. REQUERIMIENTOS FUNCIONALES
+        h3 = doc.add_heading("3. Requerimientos Funcionales (RF)", level=1)
+        h3.style.font.color.rgb = RGBColor(31, 78, 120)
+        
+        table_rf = doc.add_table(rows=1, cols=2)
+        table_rf.style = 'Table Grid'
+        hdr_cells_rf = table_rf.rows[0].cells
+        hdr_cells_rf[0].text = "ID"
+        hdr_cells_rf[1].text = "Descripción del Requerimiento Funcional"
+        
+        for cell in hdr_cells_rf:
+            set_cell_background(cell, "1F4E78")
+            for p in cell.paragraphs:
+                for run in p.runs:
+                    run.font.bold = True
+                    run.font.color.rgb = RGBColor(255, 255, 255)
+
+        for _, row in df_rf.iterrows():
+            row_cells = table_rf.add_row().cells
+            row_cells[0].text = str(row["ID"])
+            row_cells[1].text = str(row["Descripción"])
+            row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        doc.add_paragraph().paragraph_format.space_after = Pt(12)
+
+        # 5. REQUERIMIENTOS NO FUNCIONALES
+        h4 = doc.add_heading("4. Requerimientos No Funcionales (RNF)", level=1)
+        h4.style.font.color.rgb = RGBColor(192, 0, 0)
+        
+        table_rnf = doc.add_table(rows=1, cols=2)
+        table_rnf.style = 'Table Grid'
+        hdr_cells_rnf = table_rnf.rows[0].cells
+        hdr_cells_rnf[0].text = "ID"
+        hdr_cells_rnf[1].text = "Descripción del Requerimiento No Funcional"
+        
+        for cell in hdr_cells_rnf:
+            set_cell_background(cell, "C00000")
+            for p in cell.paragraphs:
+                for run in p.runs:
+                    run.font.bold = True
+                    run.font.color.rgb = RGBColor(255, 255, 255)
+
+        for _, row in df_rnf.iterrows():
+            row_cells = table_rnf.add_row().cells
+            row_cells[0].text = str(row["ID"])
+            row_cells[1].text = str(row["Descripción"])
+            row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        doc.add_paragraph().paragraph_format.space_after = Pt(12)
+
+        # 6. HISTORIAS DE USUARIO
+        h5 = doc.add_heading("5. Historias de Usuario (User Stories)", level=1)
+        h5.style.font.color.rgb = RGBColor(31, 78, 120)
+        
+        table_us = doc.add_table(rows=1, cols=4)
+        table_us.style = 'Table Grid'
+        hdr_cells_us = table_us.rows[0].cells
+        hdr_cells_us[0].text = "ID"
+        hdr_cells_us[1].text = "Como..."
+        hdr_cells_us[2].text = "Quiero..."
+        hdr_cells_us[3].text = "Para..."
+        
+        for cell in hdr_cells_us:
+            set_cell_background(cell, "333333")
+            for p in cell.paragraphs:
+                for run in p.runs:
+                    run.font.bold = True
+                    run.font.color.rgb = RGBColor(255, 255, 255)
+
+        for _, row in df_us.iterrows():
+            row_cells = table_us.add_row().cells
+            row_cells[0].text = str(row.get("ID", ""))
+            row_cells[1].text = str(row.get("Como", ""))
+            row_cells[2].text = str(row.get("Quiero", ""))
+            row_cells[3].text = str(row.get("Para", ""))
+
+        target_stream = io.BytesIO()
+        doc.save(target_stream)
+        return target_stream.getvalue()
+
+    # Generador Excel
     def generar_excel_estilizado(df_rf, df_rnf, nombre_proyecto):
         output = io.BytesIO()
         wb = openpyxl.Workbook()
-        
-        thin_border = Border(
-            left=Side(style='thin', color='D3D3D3'), right=Side(style='thin', color='D3D3D3'),
-            top=Side(style='thin', color='D3D3D3'), bottom=Side(style='thin', color='D3D3D3')
-        )
+        thin_border = Border(left=Side(style='thin', color='D3D3D3'), right=Side(style='thin', color='D3D3D3'), top=Side(style='thin', color='D3D3D3'), bottom=Side(style='thin', color='D3D3D3'))
         
         def aplicar_estilo_hoja(ws, df, titulo_hoja, color_principal, color_suave):
             ws.views.sheetView[0].showGridLines = True
-            
             ws.merge_cells("A1:B1")
             title_cell = ws["A1"]
             title_cell.value = f"📌 {titulo_hoja.upper()}"
@@ -107,35 +295,26 @@ with tab1:
             title_cell.alignment = Alignment(horizontal="center", vertical="center")
             ws.row_dimensions[1].height = 35
             
-            ws.merge_cells("A2:B2")
-            sub_cell = ws["A2"]
-            sub_cell.value = f"Proyecto: {nombre_proyecto}"
-            sub_cell.font = Font(name="Calibri", size=10, italic=True, color="595959")
-            sub_cell.alignment = Alignment(horizontal="center", vertical="center")
-            ws.row_dimensions[2].height = 18
-
             headers = ["ID", "Descripción del Requerimiento"]
-            ws.row_dimensions[4].height = 25
+            ws.row_dimensions[3].height = 25
             for col_idx, header in enumerate(headers, 1):
-                cell = ws.cell(row=4, column=col_idx, value=header)
+                cell = ws.cell(row=3, column=col_idx, value=header)
                 cell.font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
                 cell.fill = PatternFill(start_color=color_principal, end_color=color_principal, fill_type="solid")
                 cell.alignment = Alignment(horizontal="center", vertical="center")
             
             for r_idx, row in df.iterrows():
-                row_num = r_idx + 5
+                row_num = r_idx + 4
                 ws.row_dimensions[row_num].height = 22
                 bg_color = color_suave if r_idx % 2 == 1 else "FFFFFF"
                 fill_zebra = PatternFill(start_color=bg_color, end_color=bg_color, fill_type="solid")
                 
                 cell_id = ws.cell(row=row_num, column=1, value=row["ID"])
-                cell_id.font = Font(name="Calibri", size=11, bold=True, color="333333")
                 cell_id.alignment = Alignment(horizontal="center", vertical="center")
                 cell_id.border = thin_border
                 cell_id.fill = fill_zebra
                 
                 cell_desc = ws.cell(row=row_num, column=2, value=row["Descripción"])
-                cell_desc.font = Font(name="Calibri", size=11, color="333333")
                 cell_desc.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
                 cell_desc.border = thin_border
                 cell_desc.fill = fill_zebra
@@ -155,44 +334,33 @@ with tab1:
         wb.save(output)
         return output.getvalue()
 
-    excel_data = generar_excel_estilizado(df_rf_final, df_rnf_final, nombre_proj)
-
-    rf_md_text = "\n".join([f"- **{row['ID']}**: {row['Descripción']}" for _, row in df_rf_final.iterrows()])
-    rnf_md_text = "\n".join([f"- **{row['ID']}**: {row['Descripción']}" for _, row in df_rnf_final.iterrows()])
-
-    doc_ers = f"""# ERS & Acta de Constitución: {nombre_proj}
-
-## 1. Objetivo del Sistema
-{objetivo}
-
-## 2. Alcance del MVP
-{mvp_scope}
-
-## 3. Requerimientos Funcionales
-{rf_md_text}
-
-## 4. Requerimientos No Funcionales
-{rnf_md_text}
-
-## 5. Historias de Usuario
-{us_df.to_markdown(index=False)}
-"""
+    word_data = generar_word_ers(
+        st.session_state.nombre_proj, 
+        st.session_state.objetivo_text, 
+        st.session_state.mvp_text, 
+        df_rf_final, 
+        df_rnf_final, 
+        us_df
+    )
     
+    excel_data = generar_excel_estilizado(df_rf_final, df_rnf_final, st.session_state.nombre_proj)
+
     col_dl1, col_dl2 = st.columns(2)
     
     with col_dl1:
         st.download_button(
-            label="📄 Exportar ERS Completo (.md)", 
-            data=doc_ers, 
-            file_name=f"ERS_{nombre_proj.replace(' ', '_')}.md",
+            label="📝 Descargar Documento ERS en WORD (.docx)", 
+            data=word_data, 
+            file_name=f"ERS_{st.session_state.nombre_proj.replace(' ', '_')}.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             use_container_width=True
         )
         
     with col_dl2:
         st.download_button(
-            label="📊 Descargar Excel Requisitos Funcionales y no Funcionales",
+            label="📊 Descargar Excel de Requisitos (.xlsx)",
             data=excel_data,
-            file_name=f"Requisitos_{nombre_proj.replace(' ', '_')}.xlsx",
+            file_name=f"Requisitos_{st.session_state.nombre_proj.replace(' ', '_')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True
         )
@@ -328,24 +496,6 @@ with tab4:
     st.markdown("---")
     st.subheader("🎲 Estimación de Duración de Proyecto con Método de Montecarlo")
     
-    with st.expander("📖 ¿Cómo se calcula el Método de Montecarlo en Proyectos?", expanded=False):
-        st.markdown("""
-        El **Método de Montecarlo** es una técnica cuantitativa que simula miles de escenarios posibles para medir la incertidumbre en la duración total de un proyecto.
-
-        ### 📐 Fórmula e Implementación:
-        1. **Estimación por 3 Puntos (Días):**
-           * **Optimista ($O$):** Mejor escenario sin contratiempos.
-           * **Más Probable ($M$):** Estimación realista esperada.
-           * **Pesimista ($P$):** Peor escenario con riesgos materializados.
-        2. **Distribución Triangular:** Por cada iteración $k$, se simula una duración aleatoria para cada tarea usando:
-           $$T_k \sim \\text{Triangular}(\\text{Mín}=O, \\text{Moda}=M, \\text{Máx}=P)$$
-        3. **Duración Total:** Se suman las duraciones simuladas de la ruta crítica: $\\text{Total}_k = \\sum T_{k, i}$
-        4. **Interpretación de Percentiles:**
-           * **P50 (Mediana):** 50% de certeza de terminar en ese tiempo o menos.
-           * **P80 (Compromiso Recomendado):** Nivel de riesgo equilibrado para la gestión de proyectos.
-           * **P90 (Conservador):** Alta probabilidad para contratos con penalizaciones severas.
-        """)
-
     col_mc_inputs, col_mc_params = st.columns([2, 1])
     
     with col_mc_inputs:
@@ -372,7 +522,6 @@ with tab4:
         if st.button("🔄 Ejecutar Simulación Montecarlo", use_container_width=True):
             st.success("Simulación ejecutada correctamente.")
 
-    # Ejecución de la simulación
     def simular_montecarlo(df_tasks, N):
         np.random.seed(42)
         total_duraciones = np.zeros(N)
@@ -382,7 +531,6 @@ with tab4:
             m = float(row["Mas_Probable"])
             p = float(row["Pesimista"])
             
-            # Garantizar orden correcto para la distribución triangular
             low = min(o, m, p)
             high = max(o, m, p)
             mode = max(low, min(m, high))
@@ -394,8 +542,6 @@ with tab4:
 
     duraciones_simuladas = simular_montecarlo(mc_tasks_edited, n_simulaciones)
 
-    # Cálculo de métricas estadisticas
-    p10 = np.percentile(duraciones_simuladas, 10)
     p50 = np.percentile(duraciones_simuladas, 50)
     p80 = np.percentile(duraciones_simuladas, 80)
     p90 = np.percentile(duraciones_simuladas, 90)
@@ -407,7 +553,6 @@ with tab4:
     mc_col3.metric("P80 (Recomendado 80%)", f"{p80:.1f} Días", delta=f"+{p80-p50:.1f}d vs P50")
     mc_col4.metric("P90 (Conservador 90%)", f"{p90:.1f} Días")
 
-    # Gráfico de histograma + acumulado
     fig_mc = go.Figure()
 
     fig_mc.add_trace(go.Histogram(
@@ -431,28 +576,17 @@ with tab4:
 
     st.plotly_chart(fig_mc, use_container_width=True)
 
-    # ---------------------------------------------------------
-    # EXPORTADOR EXCEL DE RESULTADOS DE MONTECARLO
-    # ---------------------------------------------------------
     def generar_excel_montecarlo(df_tasks, duraciones, n_sim, nombre_p):
         output = io.BytesIO()
         wb = openpyxl.Workbook()
-        
         purple_color = "4A235A"
-        purple_light = "F5EEF8"
+        thin_border = Border(left=Side(style='thin', color='D3D3D3'), right=Side(style='thin', color='D3D3D3'), top=Side(style='thin', color='D3D3D3'), bottom=Side(style='thin', color='D3D3D3'))
         
-        thin_border = Border(
-            left=Side(style='thin', color='D3D3D3'), right=Side(style='thin', color='D3D3D3'),
-            top=Side(style='thin', color='D3D3D3'), bottom=Side(style='thin', color='D3D3D3')
-        )
-        
-        # Hoja 1: Resumen
         ws = wb.active
         ws.title = "Resumen Montecarlo"
         ws.sheet_properties.tabColor = purple_color
         ws.views.sheetView[0].showGridLines = True
         
-        # Banner Title
         ws.merge_cells("A1:D1")
         title = ws["A1"]
         title.value = "🎲 REPORTE DE SIMULACIÓN DE MONTECARLO"
@@ -461,14 +595,12 @@ with tab4:
         title.alignment = Alignment(horizontal="center", vertical="center")
         ws.row_dimensions[1].height = 35
 
-        # Subtítulo
         ws.merge_cells("A2:D2")
         sub = ws["A2"]
         sub.value = f"Proyecto: {nombre_p} | Iteraciones: {n_sim}"
         sub.font = Font(name="Calibri", size=10, italic=True, color="595959")
         sub.alignment = Alignment(horizontal="center", vertical="center")
 
-        # Tabla de Indicadores
         ws.cell(row=4, column=1, value="Métrica de Riesgo").font = Font(bold=True)
         ws.cell(row=4, column=2, value="Valor Estimado (Días)").font = Font(bold=True)
         
@@ -486,7 +618,6 @@ with tab4:
             c1.border = thin_border
             c2.border = thin_border
 
-        # Tabla de Tareas Base
         start_row_tasks = 12
         ws.cell(row=start_row_tasks, column=1, value="Tarea").font = Font(bold=True)
         ws.cell(row=start_row_tasks, column=2, value="Optimista (O)").font = Font(bold=True)
@@ -505,29 +636,15 @@ with tab4:
         ws.column_dimensions["C"].width = 20
         ws.column_dimensions["D"].width = 20
 
-        # Hoja 2: Datos Crudos
-        ws2 = wb.create_sheet(title="Muestra de Datos Simulados")
-        ws2.views.sheetView[0].showGridLines = True
-        ws2.cell(row=1, column=1, value="N° Iteración").font = Font(bold=True)
-        ws2.cell(row=1, column=2, value="Duración Total Calculada (Días)").font = Font(bold=True)
-        
-        # Muestra de las primeras 1000 iteraciones
-        for i, dur in enumerate(duraciones[:1000], 1):
-            ws2.cell(row=i+1, column=1, value=i)
-            ws2.cell(row=i+1, column=2, value=round(dur, 2))
-
-        ws2.column_dimensions["A"].width = 18
-        ws2.column_dimensions["B"].width = 32
-
         wb.save(output)
         return output.getvalue()
 
-    excel_mc_data = generar_excel_montecarlo(mc_tasks_edited, duraciones_simuladas, n_simulaciones, nombre_proj)
+    excel_mc_data = generar_excel_montecarlo(mc_tasks_edited, duraciones_simuladas, n_simulaciones, st.session_state.nombre_proj)
 
     st.download_button(
         label="📥 Descargar Reporte de Montecarlo (.xlsx)",
         data=excel_mc_data,
-        file_name=f"Montecarlo_{nombre_proj.replace(' ', '_')}.xlsx",
+        file_name=f"Montecarlo_{st.session_state.nombre_proj.replace(' ', '_')}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         use_container_width=True
     )
