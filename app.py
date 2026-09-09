@@ -3,6 +3,8 @@ import pandas as pd
 import plotly.express as px
 from streamlit_mermaid import st_mermaid
 import io
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 st.set_page_config(page_title="MatrixDevTesis", layout="wide", page_icon="🎓")
 
@@ -29,7 +31,6 @@ with tab1:
         objetivo = st.text_area("Objetivo Principal del Sistema", "Automatizar el flujo de inventario y optimizar la generación de reportes universitarios.", height=100)
         mvp_scope = st.text_area("Alcance MVP (Producto Mínimo Viable)", "Módulo de autenticación, gestión CRUD de productos y exportación del documento ERS.", height=100)
 
-    # Inicialización de DataFrames para Requerimientos
     if "df_rf" not in st.session_state:
         st.session_state.df_rf = pd.DataFrame([
             {"Descripción": "Autenticación con credenciales universitarias."},
@@ -60,7 +61,7 @@ with tab1:
             key="rnf_editor"
         )
 
-    # Autonumerar automáticamente los IDs (RF01, RF02... / RNF01, RNF02...)
+    # Autonumeración de IDs
     df_rf_final = rf_edited.dropna(subset=["Descripción"]).reset_index(drop=True)
     df_rf_final["ID"] = [f"RF{i+1:02d}" for i in range(len(df_rf_final))]
     df_rf_final = df_rf_final[["ID", "Descripción"]]
@@ -83,13 +84,90 @@ with tab1:
     st.markdown("---")
     st.subheader("📥 Exportación de Entregables")
     
-    # Generación de Excel con las dos pestañas ordenadas y autonumeradas
-    excel_buffer = io.BytesIO()
-    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-        df_rf_final.to_excel(writer, index=False, sheet_name="Funcionales")
-        df_rnf_final.to_excel(writer, index=False, sheet_name="No Funcionales")
-    
-    # Formatear requerimientos para el documento Markdown (ERS)
+    # ---------------------------------------------------------
+    # GENERADOR DE EXCEL ESTILIZADO PROFESIONAL
+    # ---------------------------------------------------------
+    def generar_excel_estilizado(df_rf, df_rnf, nombre_proyecto):
+        output = io.BytesIO()
+        wb = openpyxl.Workbook()
+        
+        thin_border = Border(
+            left=Side(style='thin', color='D3D3D3'),
+            right=Side(style='thin', color='D3D3D3'),
+            top=Side(style='thin', color='D3D3D3'),
+            bottom=Side(style='thin', color='D3D3D3')
+        )
+        
+        def aplicar_estilo_hoja(ws, df, titulo_hoja, color_principal, color_suave):
+            ws.views.sheetView[0].showGridLines = True
+            
+            # 1. Banner Principal de Título
+            ws.merge_cells("A1:B1")
+            title_cell = ws["A1"]
+            title_cell.value = f"📌 {titulo_hoja.upper()}"
+            title_cell.font = Font(name="Calibri", size=14, bold=True, color="FFFFFF")
+            title_cell.fill = PatternFill(start_color=color_principal, end_color=color_principal, fill_type="solid")
+            title_cell.alignment = Alignment(horizontal="center", vertical="center")
+            ws.row_dimensions[1].height = 35
+            
+            # 2. Subtítulo con Nombre del Proyecto
+            ws.merge_cells("A2:B2")
+            sub_cell = ws["A2"]
+            sub_cell.value = f"Proyecto: {nombre_proyecto}"
+            sub_cell.font = Font(name="Calibri", size=10, italic=True, color="595959")
+            sub_cell.alignment = Alignment(horizontal="center", vertical="center")
+            ws.row_dimensions[2].height = 18
+
+            # 3. Encabezados de Tabla
+            headers = ["ID", "Descripción del Requerimiento"]
+            ws.row_dimensions[4].height = 25
+            for col_idx, header in enumerate(headers, 1):
+                cell = ws.cell(row=4, column=col_idx, value=header)
+                cell.font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+                cell.fill = PatternFill(start_color=color_principal, end_color=color_principal, fill_type="solid")
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+            
+            # 4. Datos con estilo Zebra y bordes suaves
+            for r_idx, row in df.iterrows():
+                row_num = r_idx + 5
+                ws.row_dimensions[row_num].height = 22
+                
+                bg_color = color_suave if r_idx % 2 == 1 else "FFFFFF"
+                fill_zebra = PatternFill(start_color=bg_color, end_color=bg_color, fill_type="solid")
+                
+                cell_id = ws.cell(row=row_num, column=1, value=row["ID"])
+                cell_id.font = Font(name="Calibri", size=11, bold=True, color="333333")
+                cell_id.alignment = Alignment(horizontal="center", vertical="center")
+                cell_id.border = thin_border
+                cell_id.fill = fill_zebra
+                
+                cell_desc = ws.cell(row=row_num, column=2, value=row["Descripción"])
+                cell_desc.font = Font(name="Calibri", size=11, color="333333")
+                cell_desc.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+                cell_desc.border = thin_border
+                cell_desc.fill = fill_zebra
+
+            # 5. Ancho de Columnas
+            ws.column_dimensions["A"].width = 14
+            ws.column_dimensions["B"].width = 80
+
+        # Configuración Hoja Azul (Funcionales)
+        ws_rf = wb.active
+        ws_rf.title = "Requerimientos Funcionales"
+        ws_rf.sheet_properties.tabColor = "1F4E78"
+        aplicar_estilo_hoja(ws_rf, df_rf, "Requerimientos Funcionales", "1F4E78", "F2F5F9")
+        
+        # Configuración Hoja Roja (No Funcionales)
+        ws_rnf = wb.create_sheet(title="Requerimientos No Funcionales")
+        ws_rnf.sheet_properties.tabColor = "C00000"
+        aplicar_estilo_hoja(ws_rnf, df_rnf, "Requerimientos No Funcionales", "C00000", "FDF2F2")
+
+        wb.save(output)
+        return output.getvalue()
+
+    excel_data = generar_excel_estilizado(df_rf_final, df_rnf_final, nombre_proj)
+
+    # Markdown Document
     rf_md_text = "\n".join([f"- **{row['ID']}**: {row['Descripción']}" for _, row in df_rf_final.iterrows()])
     rnf_md_text = "\n".join([f"- **{row['ID']}**: {row['Descripción']}" for _, row in df_rnf_final.iterrows()])
 
@@ -124,7 +202,7 @@ with tab1:
     with col_dl2:
         st.download_button(
             label="📊 Descargar Excel Requisitos Funcionales y no Funcionales",
-            data=excel_buffer.getvalue(),
+            data=excel_data,
             file_name=f"Requisitos_{nombre_proj.replace(' ', '_')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True
