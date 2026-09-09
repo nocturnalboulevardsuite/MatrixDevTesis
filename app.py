@@ -19,23 +19,38 @@ from docx.oxml.ns import nsdecls
 st.set_page_config(page_title="MatrixDevTesis", layout="wide", page_icon="🎓")
 
 # ==========================================
-# CONFIGURACIÓN SIDEBAR (API KEY DE IA)
+# CONFIGURACIÓN Y LÍMITE DE USO DE IA
 # ==========================================
-st.sidebar.title("⚙️ Configuración")
-api_key = st.sidebar.text_input("🔑 API Key de Google Gemini", type="password", help="Obtén tu clave gratis en Google AI Studio")
+MAX_USOS_IA = 5
 
-# Función auxiliar robusta para la IA con fallbacks y manejo de errores visible
-def mejorar_texto_con_ia(texto_original, tipo_campo, key):
-    clean_key = key.strip() if key else ""
-    if not clean_key:
-        st.error("⚠️ Ingresa tu API Key de Gemini en la barra lateral para utilizar la IA.")
+if "usos_ia" not in st.session_state:
+    st.session_state.usos_ia = 0
+
+# Barra lateral limpia mostrando únicamente los créditos restantes del usuario
+st.sidebar.title("⚙️ Estado de Sesión")
+creditos_restantes = MAX_USOS_IA - st.session_state.usos_ia
+st.sidebar.metric("Créditos de IA disponibles", f"{creditos_restantes} / {MAX_USOS_IA}")
+st.sidebar.caption("Cada usuario cuenta con 5 mejoras automáticas con IA por sesión.")
+
+def mejorar_texto_con_ia_limite(texto_original, tipo_campo):
+    # 1. Validar si el usuario superó sus 5 usos gratuitos
+    if st.session_state.usos_ia >= MAX_USOS_IA:
+        st.error(f"🚫 Has alcanzado el límite máximo de {MAX_USOS_IA} mejoras con IA en esta sesión.")
         return None
+
+    # 2. Leer la API Key oculta cargada en el servidor (secrets.toml)
+    api_key_server = st.secrets.get("GEMINI_API_KEY", None)
+    
+    if not api_key_server:
+        st.error("⚠️ La API Key del servidor no está configurada en los Secrets de Streamlit.")
+        return None
+
     if not texto_original or texto_original.strip() == "":
         st.warning("⚠️ Escribe una idea o borrador inicial antes de solicitar la mejora.")
         return None
         
     try:
-        genai.configure(api_key=clean_key)
+        genai.configure(api_key=api_key_server.strip())
         
         prompt = f"""
         Eres un Ingeniero de Software Senior y revisor de memorias de título/tesis universitarias.
@@ -50,7 +65,6 @@ def mejorar_texto_con_ia(texto_original, tipo_campo, key):
         "{texto_original}"
         """
         
-        # Lista de modelos a intentar en orden de preferencia
         modelos = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
         
         for modelo_nombre in modelos:
@@ -58,11 +72,13 @@ def mejorar_texto_con_ia(texto_original, tipo_campo, key):
                 model = genai.GenerativeModel(modelo_nombre)
                 response = model.generate_content(prompt)
                 if response and response.text:
+                    # Descontar un uso al tener éxito
+                    st.session_state.usos_ia += 1
                     return response.text.strip()
             except Exception:
-                continue # Probar el siguiente modelo si este falla
+                continue
                 
-        st.error("❌ No se pudo conectar con los modelos de Gemini. Verifica que tu API Key sea válida en Google AI Studio.")
+        st.error("❌ No se pudo conectar con los modelos de Gemini en este momento. Inténtalo más tarde.")
         return None
 
     except Exception as e:
@@ -85,7 +101,6 @@ tab1, tab2, tab3, tab4 = st.tabs([
 with tab1:
     st.subheader("📋 Documentación Base, Requerimientos e Historias de Usuario")
     
-    # Session States iniciales
     if "nombre_proj" not in st.session_state:
         st.session_state.nombre_proj = "Sistema de Control de Inventario MatrixDev"
     if "integrantes" not in st.session_state:
@@ -115,25 +130,25 @@ with tab1:
             st.session_state.profesor = st.text_input("Profesor/a o Responsable", st.session_state.profesor)
             st.session_state.seccion = st.text_input("Sección / Asignatura", st.session_state.seccion)
 
-        # Objetivo con IA vinculada correctamente
+        # Objetivo con IA transparente
         st.write("**Objetivo Principal del Sistema**")
         st.text_area("Objetivo", key="objetivo_text", height=90, label_visibility="collapsed")
         
         if st.button("✨ Mejorar Objetivo con IA", key="btn_ai_obj"):
             with st.spinner("Optimizando redacción con IA..."):
-                resultado = mejorar_texto_con_ia(st.session_state.objetivo_text, "Objetivo Principal", api_key)
+                resultado = mejorar_texto_con_ia_limite(st.session_state.objetivo_text, "Objetivo Principal")
                 if resultado:
                     st.session_state.objetivo_text = resultado
                     st.success("¡Objetivo optimizado con éxito!")
                     st.rerun()
 
-        # Alcance MVP con IA vinculada correctamente
+        # Alcance MVP con IA transparente
         st.write("**Alcance MVP (Producto Mínimo Viable)**")
         st.text_area("Alcance", key="mvp_text", height=90, label_visibility="collapsed")
         
         if st.button("✨ Mejorar Alcance MVP con IA", key="btn_ai_mvp"):
             with st.spinner("Optimizando redacción con IA..."):
-                resultado = mejorar_texto_con_ia(st.session_state.mvp_text, "Alcance MVP", api_key)
+                resultado = mejorar_texto_con_ia_limite(st.session_state.mvp_text, "Alcance MVP")
                 if resultado:
                     st.session_state.mvp_text = resultado
                     st.success("¡Alcance optimizado con éxito!")
@@ -192,18 +207,16 @@ with tab1:
     st.markdown("---")
     st.subheader("📥 Exportación de Entregables")
     
-    # Generador de Word (.docx) formal
+    # Generador Word
     def generar_word_ers(nombre_proyecto, integrantes, profesor, fecha, seccion, objetivo, alcance, df_rf, df_rnf, df_us):
         doc = Document()
         
-        # Márgenes de 3 cm
         for sec in doc.sections:
             sec.top_margin = Cm(3)
             sec.bottom_margin = Cm(3)
             sec.left_margin = Cm(3)
             sec.right_margin = Cm(3)
 
-        # Estilo Base: Calibri 11pt, Interlineado 1.5, Justificado
         style_normal = doc.styles['Normal']
         style_normal.font.name = 'Calibri'
         style_normal.font.size = Pt(11)
@@ -216,7 +229,7 @@ with tab1:
             shd = parse_xml(f'<w:shd {nsdecls("w")} w:fill="{fill_hex}"/>')
             tcPr.append(shd)
 
-        # PÁGINA 1: PORTADA FORMAL
+        # Portada
         p_top_space = doc.add_paragraph()
         p_top_space.paragraph_format.space_before = Pt(50)
 
@@ -257,12 +270,10 @@ with tab1:
             r_v = p_meta.add_run(f"{val}\n")
             r_v.font.size = Pt(11)
 
-        # PÁGINA 2: HOJA EN BLANCO
         doc.add_page_break()
         doc.add_paragraph("")
         doc.add_page_break()
 
-        # PÁGINA 3 EN ADELANTE: CONTENIDO
         def agregar_encabezado_seccion(texto, nivel=1, color=RGBColor(31, 78, 120)):
             h = doc.add_heading(level=nivel)
             h.alignment = WD_ALIGN_PARAGRAPH.LEFT
@@ -275,15 +286,13 @@ with tab1:
             r.font.color.rgb = color
             return h
 
-        # 1. OBJETIVO
+        # Secciones
         agregar_encabezado_seccion("1. Objetivo Principal del Sistema")
         doc.add_paragraph(objetivo)
 
-        # 2. ALCANCE
         agregar_encabezado_seccion("2. Alcance del Producto Mínimo Viable (MVP)")
         doc.add_paragraph(alcance)
 
-        # 3. REQUISITOS FUNCIONALES
         agregar_encabezado_seccion("3. Requerimientos Funcionales (RF)")
         table_rf = doc.add_table(rows=1, cols=2)
         table_rf.style = 'Table Grid'
@@ -316,10 +325,8 @@ with tab1:
                         run.font.name = 'Calibri'
                         run.font.size = Pt(10)
 
-        p_space1 = doc.add_paragraph()
-        p_space1.paragraph_format.space_before = Pt(10)
+        doc.add_paragraph().paragraph_format.space_before = Pt(10)
 
-        # 4. REQUISITOS NO FUNCIONALES
         agregar_encabezado_seccion("4. Requerimientos No Funcionales (RNF)", color=RGBColor(192, 0, 0))
         table_rnf = doc.add_table(rows=1, cols=2)
         table_rnf.style = 'Table Grid'
@@ -352,10 +359,8 @@ with tab1:
                         run.font.name = 'Calibri'
                         run.font.size = Pt(10)
 
-        p_space2 = doc.add_paragraph()
-        p_space2.paragraph_format.space_before = Pt(10)
+        doc.add_paragraph().paragraph_format.space_before = Pt(10)
 
-        # 5. HISTORIAS DE USUARIO
         agregar_encabezado_seccion("5. Historias de Usuario (User Stories)")
         table_us = doc.add_table(rows=1, cols=4)
         table_us.style = 'Table Grid'
@@ -612,9 +617,6 @@ with tab4:
         fig_gantt.update_yaxes(autorange="reversed")
         st.plotly_chart(fig_gantt, use_container_width=True)
 
-    # ---------------------------------------------------------
-    # SIMULACIÓN MONTECARLO
-    # ---------------------------------------------------------
     st.markdown("---")
     st.subheader("🎲 Estimación de Duración de Proyecto con Método de Montecarlo")
     
