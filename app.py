@@ -24,17 +24,18 @@ st.set_page_config(page_title="MatrixDevTesis", layout="wide", page_icon="🎓")
 st.sidebar.title("⚙️ Configuración")
 api_key = st.sidebar.text_input("🔑 API Key de Google Gemini", type="password", help="Obtén tu clave gratis en Google AI Studio")
 
-# Función auxiliar para llamar a la IA
+# Función auxiliar robusta para la IA con fallbacks y manejo de errores visible
 def mejorar_texto_con_ia(texto_original, tipo_campo, key):
-    if not key:
-        st.sidebar.error("⚠️ Ingresa una API Key de Gemini en la barra lateral para usar la IA.")
-        return texto_original
+    clean_key = key.strip() if key else ""
+    if not clean_key:
+        st.error("⚠️ Ingresa tu API Key de Gemini en la barra lateral para utilizar la IA.")
+        return None
     if not texto_original or texto_original.strip() == "":
-        return texto_original
+        st.warning("⚠️ Escribe una idea o borrador inicial antes de solicitar la mejora.")
+        return None
         
     try:
-        genai.configure(api_key=key)
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        genai.configure(api_key=clean_key)
         
         prompt = f"""
         Eres un Ingeniero de Software Senior y revisor de memorias de título/tesis universitarias.
@@ -48,11 +49,25 @@ def mejorar_texto_con_ia(texto_original, tipo_campo, key):
         Borrador original:
         "{texto_original}"
         """
-        response = model.generate_content(prompt)
-        return response.text.strip()
+        
+        # Lista de modelos a intentar en orden de preferencia
+        modelos = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+        
+        for modelo_nombre in modelos:
+            try:
+                model = genai.GenerativeModel(modelo_nombre)
+                response = model.generate_content(prompt)
+                if response and response.text:
+                    return response.text.strip()
+            except Exception:
+                continue # Probar el siguiente modelo si este falla
+                
+        st.error("❌ No se pudo conectar con los modelos de Gemini. Verifica que tu API Key sea válida en Google AI Studio.")
+        return None
+
     except Exception as e:
-        st.error(f"Error al conectar con la IA: {str(e)}")
-        return texto_original
+        st.error(f"❌ Error al procesar con IA: {str(e)}")
+        return None
 
 st.title("🎓 MatrixDevTesis")
 st.caption("Suite web all-in-one para la gestión, modelado y documentación de proyectos informáticos.")
@@ -70,7 +85,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 with tab1:
     st.subheader("📋 Documentación Base, Requerimientos e Historias de Usuario")
     
-    # Session States para los datos del proyecto
+    # Session States iniciales
     if "nombre_proj" not in st.session_state:
         st.session_state.nombre_proj = "Sistema de Control de Inventario MatrixDev"
     if "integrantes" not in st.session_state:
@@ -100,21 +115,29 @@ with tab1:
             st.session_state.profesor = st.text_input("Profesor/a o Responsable", st.session_state.profesor)
             st.session_state.seccion = st.text_input("Sección / Asignatura", st.session_state.seccion)
 
-        # Objetivo con botón de IA
+        # Objetivo con IA vinculada correctamente
         st.write("**Objetivo Principal del Sistema**")
-        st.session_state.objetivo_text = st.text_area("Objetivo", st.session_state.objetivo_text, height=90, label_visibility="collapsed")
+        st.text_area("Objetivo", key="objetivo_text", height=90, label_visibility="collapsed")
+        
         if st.button("✨ Mejorar Objetivo con IA", key="btn_ai_obj"):
             with st.spinner("Optimizando redacción con IA..."):
-                st.session_state.objetivo_text = mejorar_texto_con_ia(st.session_state.objetivo_text, "Objetivo Principal", api_key)
-                st.rerun()
+                resultado = mejorar_texto_con_ia(st.session_state.objetivo_text, "Objetivo Principal", api_key)
+                if resultado:
+                    st.session_state.objetivo_text = resultado
+                    st.success("¡Objetivo optimizado con éxito!")
+                    st.rerun()
 
-        # Alcance MVP con botón de IA
+        # Alcance MVP con IA vinculada correctamente
         st.write("**Alcance MVP (Producto Mínimo Viable)**")
-        st.session_state.mvp_text = st.text_area("Alcance", st.session_state.mvp_text, height=90, label_visibility="collapsed")
+        st.text_area("Alcance", key="mvp_text", height=90, label_visibility="collapsed")
+        
         if st.button("✨ Mejorar Alcance MVP con IA", key="btn_ai_mvp"):
             with st.spinner("Optimizando redacción con IA..."):
-                st.session_state.mvp_text = mejorar_texto_con_ia(st.session_state.mvp_text, "Alcance MVP", api_key)
-                st.rerun()
+                resultado = mejorar_texto_con_ia(st.session_state.mvp_text, "Alcance MVP", api_key)
+                if resultado:
+                    st.session_state.mvp_text = resultado
+                    st.success("¡Alcance optimizado con éxito!")
+                    st.rerun()
 
     if "df_rf" not in st.session_state:
         st.session_state.df_rf = pd.DataFrame([
@@ -169,20 +192,18 @@ with tab1:
     st.markdown("---")
     st.subheader("📥 Exportación de Entregables")
     
-    # ---------------------------------------------------------
-    # GENERADOR DE DOCUMENTO WORD (.DOCX) SERIO Y FORMATO TESIS
-    # ---------------------------------------------------------
+    # Generador de Word (.docx) formal
     def generar_word_ers(nombre_proyecto, integrantes, profesor, fecha, seccion, objetivo, alcance, df_rf, df_rnf, df_us):
         doc = Document()
         
-        # 1. Configuración de Márgenes de 3 cm en todas las páginas
+        # Márgenes de 3 cm
         for sec in doc.sections:
             sec.top_margin = Cm(3)
             sec.bottom_margin = Cm(3)
             sec.left_margin = Cm(3)
             sec.right_margin = Cm(3)
 
-        # 2. Configurar Estilo Base (Calibri 11pt, Interlineado 1.5, Justificado)
+        # Estilo Base: Calibri 11pt, Interlineado 1.5, Justificado
         style_normal = doc.styles['Normal']
         style_normal.font.name = 'Calibri'
         style_normal.font.size = Pt(11)
@@ -190,26 +211,22 @@ with tab1:
         style_normal.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         style_normal.paragraph_format.space_after = Pt(6)
 
-        # Helper para sombreado de celdas en tablas
         def set_cell_background(cell, fill_hex):
             tcPr = cell._element.get_or_add_tcPr()
             shd = parse_xml(f'<w:shd {nsdecls("w")} w:fill="{fill_hex}"/>')
             tcPr.append(shd)
 
-        # ==========================================
-        # PÁGINA 1: PORTADA ACADÉMICA / FORMAL
-        # ==========================================
+        # PÁGINA 1: PORTADA FORMAL
         p_top_space = doc.add_paragraph()
         p_top_space.paragraph_format.space_before = Pt(50)
 
-        # Título Principal
         p_title = doc.add_paragraph()
         p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_title.paragraph_format.line_spacing = 1.3
         r_title = p_title.add_run("ESPECIFICACIÓN DE REQUISITOS DE SOFTWARE\n(ERS)")
         r_title.bold = True
         r_title.font.size = Pt(22)
-        r_title.font.color.rgb = RGBColor(31, 78, 120)  # Azul formal (#1F4E78)
+        r_title.font.color.rgb = RGBColor(31, 78, 120)
 
         p_sub = doc.add_paragraph()
         p_sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -218,11 +235,9 @@ with tab1:
         r_sub.font.size = Pt(14)
         r_sub.font.color.rgb = RGBColor(89, 89, 89)
 
-        # Espaciado hacia el bloque de metadatos inferiores
         p_mid_space = doc.add_paragraph()
         p_mid_space.paragraph_format.space_before = Pt(180)
 
-        # Bloque Metadatos Portada
         p_meta = doc.add_paragraph()
         p_meta.alignment = WD_ALIGN_PARAGRAPH.LEFT
         p_meta.paragraph_format.line_spacing = 1.5
@@ -242,17 +257,12 @@ with tab1:
             r_v = p_meta.add_run(f"{val}\n")
             r_v.font.size = Pt(11)
 
-        # ==========================================
         # PÁGINA 2: HOJA EN BLANCO
-        # ==========================================
-        doc.add_page_break()  # Pasa a la Página 2
-        doc.add_paragraph("")  # Contenido vacío
-        doc.add_page_break()  # Pasa a la Página 3
+        doc.add_page_break()
+        doc.add_paragraph("")
+        doc.add_page_break()
 
-        # ==========================================
-        # PÁGINA 3 EN ADELANTE: CONTENIDO ERS
-        # ==========================================
-        
+        # PÁGINA 3 EN ADELANTE: CONTENIDO
         def agregar_encabezado_seccion(texto, nivel=1, color=RGBColor(31, 78, 120)):
             h = doc.add_heading(level=nivel)
             h.alignment = WD_ALIGN_PARAGRAPH.LEFT
@@ -265,17 +275,16 @@ with tab1:
             r.font.color.rgb = color
             return h
 
-        # 1. OBJETIVO DEL SISTEMA
+        # 1. OBJETIVO
         agregar_encabezado_seccion("1. Objetivo Principal del Sistema")
         doc.add_paragraph(objetivo)
 
-        # 2. ALCANCE DEL MVP
+        # 2. ALCANCE
         agregar_encabezado_seccion("2. Alcance del Producto Mínimo Viable (MVP)")
         doc.add_paragraph(alcance)
 
-        # 3. REQUERIMIENTOS FUNCIONALES
+        # 3. REQUISITOS FUNCIONALES
         agregar_encabezado_seccion("3. Requerimientos Funcionales (RF)")
-        
         table_rf = doc.add_table(rows=1, cols=2)
         table_rf.style = 'Table Grid'
         hdr_rf = table_rf.rows[0].cells
@@ -310,9 +319,8 @@ with tab1:
         p_space1 = doc.add_paragraph()
         p_space1.paragraph_format.space_before = Pt(10)
 
-        # 4. REQUERIMIENTOS NO FUNCIONALES
+        # 4. REQUISITOS NO FUNCIONALES
         agregar_encabezado_seccion("4. Requerimientos No Funcionales (RNF)", color=RGBColor(192, 0, 0))
-        
         table_rnf = doc.add_table(rows=1, cols=2)
         table_rnf.style = 'Table Grid'
         hdr_rnf = table_rnf.rows[0].cells
@@ -349,7 +357,6 @@ with tab1:
 
         # 5. HISTORIAS DE USUARIO
         agregar_encabezado_seccion("5. Historias de Usuario (User Stories)")
-        
         table_us = doc.add_table(rows=1, cols=4)
         table_us.style = 'Table Grid'
         hdr_us = table_us.rows[0].cells
@@ -606,7 +613,7 @@ with tab4:
         st.plotly_chart(fig_gantt, use_container_width=True)
 
     # ---------------------------------------------------------
-    # SECCIÓN DE SIMULACIÓN MÉTODO DE MONTECARLO
+    # SIMULACIÓN MONTECARLO
     # ---------------------------------------------------------
     st.markdown("---")
     st.subheader("🎲 Estimación de Duración de Proyecto con Método de Montecarlo")
