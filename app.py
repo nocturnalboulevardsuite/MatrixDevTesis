@@ -67,7 +67,7 @@ def mejorar_texto_con_ia_limite(texto_original, tipo_campo):
         "{texto_original}"
         """
         
-        modelos = ["gemini-1.5-flash", "gemini-2.0-flash"]
+        modelos = ["gemini-1.5-flash", "gemini-3.6-flash"]
         ultimo_error = None
         
         for modelo_nombre in modelos:
