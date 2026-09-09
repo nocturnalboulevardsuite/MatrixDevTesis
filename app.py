@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from streamlit_mermaid import st_mermaid
+import io # Librería nativa para manejar el archivo Excel en memoria
 
 # Configuración inicial de la aplicación
 st.set_page_config(page_title="MatrixDevTesis", layout="wide", page_icon="🎓")
@@ -44,8 +45,37 @@ with tab1:
     
     us_df = st.data_editor(st.session_state.user_stories, num_rows="dynamic", use_container_width=True, key="us_editor")
 
-    # Exportador de Documento ERS / Acta de Constitución
     st.markdown("---")
+    st.subheader("📥 Exportación de Entregables")
+    
+    # ---------------------------------------------------------
+    # LÓGICA PARA EXPORTAR EXCEL DE REQUERIMIENTOS
+    # ---------------------------------------------------------
+    def parse_requerimientos(texto):
+        """Función auxiliar para convertir el texto en un DataFrame estructurado"""
+        lineas = [linea.strip() for linea in texto.split('\n') if linea.strip()]
+        datos = []
+        for linea in lineas:
+            if ':' in linea:
+                req_id, req_desc = linea.split(':', 1)
+                datos.append({"ID": req_id.strip(), "Descripción": req_desc.strip()})
+            else:
+                datos.append({"ID": "-", "Descripción": linea.strip()})
+        return pd.DataFrame(datos)
+
+    # Convertimos los textos en DataFrames
+    df_rf = parse_requerimientos(req_funcionales)
+    df_rnf = parse_requerimientos(req_no_funcionales)
+
+    # Creamos el archivo Excel en memoria con dos pestañas
+    excel_buffer = io.BytesIO()
+    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+        df_rf.to_excel(writer, index=False, sheet_name="Funcionales")
+        df_rnf.to_excel(writer, index=False, sheet_name="No Funcionales")
+    
+    # ---------------------------------------------------------
+    # GENERACIÓN DEL MARKDOWN ERS
+    # ---------------------------------------------------------
     doc_ers = f"""# ERS & Acta de Constitución: {nombre_proj}
 
 ## 1. Objetivo del Sistema
@@ -63,7 +93,27 @@ with tab1:
 ## 5. Historias de Usuario
 {us_df.to_markdown(index=False)}
 """
-    st.download_button("📥 Exportar ERS Completo (.md)", doc_ers, file_name=f"ERS_{nombre_proj.replace(' ', '_')}.md")
+    
+    # Botones de descarga alineados en columnas
+    col_dl1, col_dl2 = st.columns(2)
+    
+    with col_dl1:
+        st.download_button(
+            label="📄 Exportar ERS Completo (.md)", 
+            data=doc_ers, 
+            file_name=f"ERS_{nombre_proj.replace(' ', '_')}.md",
+            use_container_width=True
+        )
+        
+    with col_dl2:
+        st.download_button(
+            label="📊 Descargar Excel Requisitos Funcionales y no Funcionales",
+            data=excel_buffer.getvalue(),
+            file_name=f"Requisitos_{nombre_proj.replace(' ', '_')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+
 
 # ==========================================
 # TAB 2: MODELADO VISUAL (MERMAID.JS)
