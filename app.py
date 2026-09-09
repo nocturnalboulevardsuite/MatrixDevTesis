@@ -50,7 +50,9 @@ def mejorar_texto_con_ia_limite(texto_original, tipo_campo):
         return None
         
     try:
-        genai.configure(api_key=api_key_server.strip())
+        # Limpieza de comillas o espacios accidentales en la API Key
+        clean_key = str(api_key_server).strip().strip('"').strip("'")
+        genai.configure(api_key=clean_key)
         
         prompt = f"""
         Eres un Ingeniero de Software Senior y revisor de memorias de título/tesis universitarias.
@@ -66,6 +68,7 @@ def mejorar_texto_con_ia_limite(texto_original, tipo_campo):
         """
         
         modelos = ["gemini-1.5-flash", "gemini-2.0-flash"]
+        ultimo_error = None
         
         for modelo_nombre in modelos:
             try:
@@ -75,10 +78,11 @@ def mejorar_texto_con_ia_limite(texto_original, tipo_campo):
                     # Descontar un uso al tener éxito
                     st.session_state.usos_ia += 1
                     return response.text.strip()
-            except Exception:
+            except Exception as err:
+                ultimo_error = str(err)
                 continue
                 
-        st.error("❌ No se pudo conectar con los modelos de Gemini en este momento. Inténtalo más tarde.")
+        st.error(f"❌ No se pudo conectar con Gemini. Detalle: {ultimo_error}")
         return None
 
     except Exception as e:
