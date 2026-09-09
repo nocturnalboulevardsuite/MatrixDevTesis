@@ -11,10 +11,10 @@ import google.generativeai as genai
 
 # Librerías para generación de Word (.docx)
 from docx import Document
-from docx.shared import Inches, Pt, RGBColor
+from docx.shared import Cm, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml import parse_xml, OxmlElement
-from docx.oxml.ns import nsdecls, qn
+from docx.oxml import parse_xml
+from docx.oxml.ns import nsdecls
 
 st.set_page_config(page_title="MatrixDevTesis", layout="wide", page_icon="🎓")
 
@@ -70,9 +70,17 @@ tab1, tab2, tab3, tab4 = st.tabs([
 with tab1:
     st.subheader("📋 Documentación Base, Requerimientos e Historias de Usuario")
     
-    # Session States para los textos editables por IA
+    # Session States para los datos del proyecto
     if "nombre_proj" not in st.session_state:
         st.session_state.nombre_proj = "Sistema de Control de Inventario MatrixDev"
+    if "integrantes" not in st.session_state:
+        st.session_state.integrantes = "Juan Pérez, María González"
+    if "profesor" not in st.session_state:
+        st.session_state.profesor = "Dr. Roberto Gómez"
+    if "fecha" not in st.session_state:
+        st.session_state.fecha = "10 de Septiembre de 2026"
+    if "seccion" not in st.session_state:
+        st.session_state.seccion = "Sección 1 - Taller de Proyecto de Título"
     if "objetivo_text" not in st.session_state:
         st.session_state.objetivo_text = "Automatizar el flujo de inventario y optimizar la generación de reportes universitarios."
     if "mvp_text" not in st.session_state:
@@ -81,11 +89,20 @@ with tab1:
     col_acta1, col_acta2 = st.columns([1, 1])
     
     with col_acta1:
+        st.write("**Metadatos para Portada del Documento ERS**")
         st.session_state.nombre_proj = st.text_input("Nombre del Proyecto", st.session_state.nombre_proj)
         
+        col_meta1, col_meta2 = st.columns(2)
+        with col_meta1:
+            st.session_state.integrantes = st.text_input("Integrante/s", st.session_state.integrantes)
+            st.session_state.fecha = st.text_input("Fecha", st.session_state.fecha)
+        with col_meta2:
+            st.session_state.profesor = st.text_input("Profesor/a o Responsable", st.session_state.profesor)
+            st.session_state.seccion = st.text_input("Sección / Asignatura", st.session_state.seccion)
+
         # Objetivo con botón de IA
         st.write("**Objetivo Principal del Sistema**")
-        st.session_state.objetivo_text = st.text_area("Objetivo", st.session_state.objetivo_text, height=100, label_visibility="collapsed")
+        st.session_state.objetivo_text = st.text_area("Objetivo", st.session_state.objetivo_text, height=90, label_visibility="collapsed")
         if st.button("✨ Mejorar Objetivo con IA", key="btn_ai_obj"):
             with st.spinner("Optimizando redacción con IA..."):
                 st.session_state.objetivo_text = mejorar_texto_con_ia(st.session_state.objetivo_text, "Objetivo Principal", api_key)
@@ -93,7 +110,7 @@ with tab1:
 
         # Alcance MVP con botón de IA
         st.write("**Alcance MVP (Producto Mínimo Viable)**")
-        st.session_state.mvp_text = st.text_area("Alcance", st.session_state.mvp_text, height=100, label_visibility="collapsed")
+        st.session_state.mvp_text = st.text_area("Alcance", st.session_state.mvp_text, height=90, label_visibility="collapsed")
         if st.button("✨ Mejorar Alcance MVP con IA", key="btn_ai_mvp"):
             with st.spinner("Optimizando redacción con IA..."):
                 st.session_state.mvp_text = mejorar_texto_con_ia(st.session_state.mvp_text, "Alcance MVP", api_key)
@@ -153,119 +170,204 @@ with tab1:
     st.subheader("📥 Exportación de Entregables")
     
     # ---------------------------------------------------------
-    # GENERADOR DE DOCUMENTO WORD (.DOCX)
+    # GENERADOR DE DOCUMENTO WORD (.DOCX) SERIO Y FORMATO TESIS
     # ---------------------------------------------------------
-    def generar_word_ers(nombre_proyecto, objetivo, alcance, df_rf, df_rnf, df_us):
+    def generar_word_ers(nombre_proyecto, integrantes, profesor, fecha, seccion, objetivo, alcance, df_rf, df_rnf, df_us):
         doc = Document()
         
-        # Margenes estándar de 2.5 cm
-        sections = doc.sections
-        for section in sections:
-            section.top_margin = Inches(1)
-            section.bottom_margin = Inches(1)
-            section.left_margin = Inches(1)
-            section.right_margin = Inches(1)
+        # 1. Configuración de Márgenes de 3 cm en todas las páginas
+        for sec in doc.sections:
+            sec.top_margin = Cm(3)
+            sec.bottom_margin = Cm(3)
+            sec.left_margin = Cm(3)
+            sec.right_margin = Cm(3)
 
-        # Función auxiliar para formatear encabezados de tabla
+        # 2. Configurar Estilo Base (Calibri 11pt, Interlineado 1.5, Justificado)
+        style_normal = doc.styles['Normal']
+        style_normal.font.name = 'Calibri'
+        style_normal.font.size = Pt(11)
+        style_normal.paragraph_format.line_spacing = 1.5
+        style_normal.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        style_normal.paragraph_format.space_after = Pt(6)
+
+        # Helper para sombreado de celdas en tablas
         def set_cell_background(cell, fill_hex):
             tcPr = cell._element.get_or_add_tcPr()
             shd = parse_xml(f'<w:shd {nsdecls("w")} w:fill="{fill_hex}"/>')
             tcPr.append(shd)
 
-        # 1. TÍTULO PRINCIPAL
-        title_p = doc.add_paragraph()
-        title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run_title = title_p.add_run(f"ESPECIFICACIÓN DE REQUISITOS DE SOFTWARE (ERS)\n")
-        run_title.bold = True
-        run_title.font.size = Pt(18)
-        run_title.font.color.rgb = RGBColor(31, 78, 120)
+        # ==========================================
+        # PÁGINA 1: PORTADA ACADÉMICA / FORMAL
+        # ==========================================
+        p_top_space = doc.add_paragraph()
+        p_top_space.paragraph_format.space_before = Pt(50)
 
-        run_sub = title_p.add_run(f"Proyecto: {nombre_proyecto}")
-        run_sub.italic = True
-        run_sub.font.size = Pt(13)
-        run_sub.font.color.rgb = RGBColor(89, 89, 89)
+        # Título Principal
+        p_title = doc.add_paragraph()
+        p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_title.paragraph_format.line_spacing = 1.3
+        r_title = p_title.add_run("ESPECIFICACIÓN DE REQUISITOS DE SOFTWARE\n(ERS)")
+        r_title.bold = True
+        r_title.font.size = Pt(22)
+        r_title.font.color.rgb = RGBColor(31, 78, 120)  # Azul formal (#1F4E78)
 
-        doc.add_paragraph().paragraph_format.space_after = Pt(12)
+        p_sub = doc.add_paragraph()
+        p_sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r_sub = p_sub.add_run(f"\nPROYECTO: {nombre_proyecto.upper()}")
+        r_sub.bold = True
+        r_sub.font.size = Pt(14)
+        r_sub.font.color.rgb = RGBColor(89, 89, 89)
 
-        # 2. OBJETIVO DEL SISTEMA
-        h1 = doc.add_heading("1. Objetivo Principal del Sistema", level=1)
-        h1.style.font.color.rgb = RGBColor(31, 78, 120)
-        p_obj = doc.add_paragraph(objetivo)
-        p_obj.paragraph_format.space_after = Pt(12)
+        # Espaciado hacia el bloque de metadatos inferiores
+        p_mid_space = doc.add_paragraph()
+        p_mid_space.paragraph_format.space_before = Pt(180)
 
-        # 3. ALCANCE DEL MVP
-        h2 = doc.add_heading("2. Alcance del Producto Mínimo Viable (MVP)", level=1)
-        h2.style.font.color.rgb = RGBColor(31, 78, 120)
-        p_mvp = doc.add_paragraph(alcance)
-        p_mvp.paragraph_format.space_after = Pt(12)
+        # Bloque Metadatos Portada
+        p_meta = doc.add_paragraph()
+        p_meta.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        p_meta.paragraph_format.line_spacing = 1.5
+        
+        datos_portada = [
+            ("Nombre del Proyecto:", nombre_proyecto),
+            ("Integrante/s:", integrantes),
+            ("Profesor/a o Responsable:", profesor),
+            ("Fecha:", fecha),
+            ("Sección:", seccion)
+        ]
+        
+        for campo, val in datos_portada:
+            r_c = p_meta.add_run(f"• {campo} ")
+            r_c.bold = True
+            r_c.font.size = Pt(11)
+            r_v = p_meta.add_run(f"{val}\n")
+            r_v.font.size = Pt(11)
 
-        # 4. REQUERIMIENTOS FUNCIONALES
-        h3 = doc.add_heading("3. Requerimientos Funcionales (RF)", level=1)
-        h3.style.font.color.rgb = RGBColor(31, 78, 120)
+        # ==========================================
+        # PÁGINA 2: HOJA EN BLANCO
+        # ==========================================
+        doc.add_page_break()  # Pasa a la Página 2
+        doc.add_paragraph("")  # Contenido vacío
+        doc.add_page_break()  # Pasa a la Página 3
+
+        # ==========================================
+        # PÁGINA 3 EN ADELANTE: CONTENIDO ERS
+        # ==========================================
+        
+        def agregar_encabezado_seccion(texto, nivel=1, color=RGBColor(31, 78, 120)):
+            h = doc.add_heading(level=nivel)
+            h.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            h.paragraph_format.space_before = Pt(16)
+            h.paragraph_format.space_after = Pt(6)
+            r = h.add_run(texto)
+            r.bold = True
+            r.font.name = 'Calibri'
+            r.font.size = Pt(14 if nivel == 1 else 12)
+            r.font.color.rgb = color
+            return h
+
+        # 1. OBJETIVO DEL SISTEMA
+        agregar_encabezado_seccion("1. Objetivo Principal del Sistema")
+        doc.add_paragraph(objetivo)
+
+        # 2. ALCANCE DEL MVP
+        agregar_encabezado_seccion("2. Alcance del Producto Mínimo Viable (MVP)")
+        doc.add_paragraph(alcance)
+
+        # 3. REQUERIMIENTOS FUNCIONALES
+        agregar_encabezado_seccion("3. Requerimientos Funcionales (RF)")
         
         table_rf = doc.add_table(rows=1, cols=2)
         table_rf.style = 'Table Grid'
-        hdr_cells_rf = table_rf.rows[0].cells
-        hdr_cells_rf[0].text = "ID"
-        hdr_cells_rf[1].text = "Descripción del Requerimiento Funcional"
+        hdr_rf = table_rf.rows[0].cells
+        hdr_rf[0].text = "ID"
+        hdr_rf[1].text = "Descripción del Requerimiento Funcional"
         
-        for cell in hdr_cells_rf:
+        for cell in hdr_rf:
             set_cell_background(cell, "1F4E78")
             for p in cell.paragraphs:
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                p.paragraph_format.line_spacing = 1.15
+                p.paragraph_format.space_after = Pt(2)
                 for run in p.runs:
+                    run.font.name = 'Calibri'
                     run.font.bold = True
+                    run.font.size = Pt(10)
                     run.font.color.rgb = RGBColor(255, 255, 255)
 
         for _, row in df_rf.iterrows():
             row_cells = table_rf.add_row().cells
             row_cells[0].text = str(row["ID"])
             row_cells[1].text = str(row["Descripción"])
-            row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            for idx, cell in enumerate(row_cells):
+                for p in cell.paragraphs:
+                    p.paragraph_format.line_spacing = 1.15
+                    p.paragraph_format.space_after = Pt(2)
+                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER if idx == 0 else WD_ALIGN_PARAGRAPH.JUSTIFY
+                    for run in p.runs:
+                        run.font.name = 'Calibri'
+                        run.font.size = Pt(10)
 
-        doc.add_paragraph().paragraph_format.space_after = Pt(12)
+        p_space1 = doc.add_paragraph()
+        p_space1.paragraph_format.space_before = Pt(10)
 
-        # 5. REQUERIMIENTOS NO FUNCIONALES
-        h4 = doc.add_heading("4. Requerimientos No Funcionales (RNF)", level=1)
-        h4.style.font.color.rgb = RGBColor(192, 0, 0)
+        # 4. REQUERIMIENTOS NO FUNCIONALES
+        agregar_encabezado_seccion("4. Requerimientos No Funcionales (RNF)", color=RGBColor(192, 0, 0))
         
         table_rnf = doc.add_table(rows=1, cols=2)
         table_rnf.style = 'Table Grid'
-        hdr_cells_rnf = table_rnf.rows[0].cells
-        hdr_cells_rnf[0].text = "ID"
-        hdr_cells_rnf[1].text = "Descripción del Requerimiento No Funcional"
+        hdr_rnf = table_rnf.rows[0].cells
+        hdr_rnf[0].text = "ID"
+        hdr_rnf[1].text = "Descripción del Requerimiento No Funcional"
         
-        for cell in hdr_cells_rnf:
+        for cell in hdr_rnf:
             set_cell_background(cell, "C00000")
             for p in cell.paragraphs:
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                p.paragraph_format.line_spacing = 1.15
+                p.paragraph_format.space_after = Pt(2)
                 for run in p.runs:
+                    run.font.name = 'Calibri'
                     run.font.bold = True
+                    run.font.size = Pt(10)
                     run.font.color.rgb = RGBColor(255, 255, 255)
 
         for _, row in df_rnf.iterrows():
             row_cells = table_rnf.add_row().cells
             row_cells[0].text = str(row["ID"])
             row_cells[1].text = str(row["Descripción"])
-            row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            for idx, cell in enumerate(row_cells):
+                for p in cell.paragraphs:
+                    p.paragraph_format.line_spacing = 1.15
+                    p.paragraph_format.space_after = Pt(2)
+                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER if idx == 0 else WD_ALIGN_PARAGRAPH.JUSTIFY
+                    for run in p.runs:
+                        run.font.name = 'Calibri'
+                        run.font.size = Pt(10)
 
-        doc.add_paragraph().paragraph_format.space_after = Pt(12)
+        p_space2 = doc.add_paragraph()
+        p_space2.paragraph_format.space_before = Pt(10)
 
-        # 6. HISTORIAS DE USUARIO
-        h5 = doc.add_heading("5. Historias de Usuario (User Stories)", level=1)
-        h5.style.font.color.rgb = RGBColor(31, 78, 120)
+        # 5. HISTORIAS DE USUARIO
+        agregar_encabezado_seccion("5. Historias de Usuario (User Stories)")
         
         table_us = doc.add_table(rows=1, cols=4)
         table_us.style = 'Table Grid'
-        hdr_cells_us = table_us.rows[0].cells
-        hdr_cells_us[0].text = "ID"
-        hdr_cells_us[1].text = "Como..."
-        hdr_cells_us[2].text = "Quiero..."
-        hdr_cells_us[3].text = "Para..."
+        hdr_us = table_us.rows[0].cells
+        hdr_us[0].text = "ID"
+        hdr_us[1].text = "Como..."
+        hdr_us[2].text = "Quiero..."
+        hdr_us[3].text = "Para..."
         
-        for cell in hdr_cells_us:
+        for cell in hdr_us:
             set_cell_background(cell, "333333")
             for p in cell.paragraphs:
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                p.paragraph_format.line_spacing = 1.15
+                p.paragraph_format.space_after = Pt(2)
                 for run in p.runs:
+                    run.font.name = 'Calibri'
                     run.font.bold = True
+                    run.font.size = Pt(10)
                     run.font.color.rgb = RGBColor(255, 255, 255)
 
         for _, row in df_us.iterrows():
@@ -274,6 +376,15 @@ with tab1:
             row_cells[1].text = str(row.get("Como", ""))
             row_cells[2].text = str(row.get("Quiero", ""))
             row_cells[3].text = str(row.get("Para", ""))
+            
+            for idx, cell in enumerate(row_cells):
+                for p in cell.paragraphs:
+                    p.paragraph_format.line_spacing = 1.15
+                    p.paragraph_format.space_after = Pt(2)
+                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER if idx == 0 else WD_ALIGN_PARAGRAPH.LEFT
+                    for run in p.runs:
+                        run.font.name = 'Calibri'
+                        run.font.size = Pt(10)
 
         target_stream = io.BytesIO()
         doc.save(target_stream)
@@ -335,7 +446,11 @@ with tab1:
         return output.getvalue()
 
     word_data = generar_word_ers(
-        st.session_state.nombre_proj, 
+        st.session_state.nombre_proj,
+        st.session_state.integrantes,
+        st.session_state.profesor,
+        st.session_state.fecha,
+        st.session_state.seccion,
         st.session_state.objetivo_text, 
         st.session_state.mvp_text, 
         df_rf_final, 
