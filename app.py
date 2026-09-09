@@ -2,15 +2,13 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from streamlit_mermaid import st_mermaid
-import io # Librería nativa para manejar el archivo Excel en memoria
+import io
 
-# Configuración inicial de la aplicación
 st.set_page_config(page_title="MatrixDevTesis", layout="wide", page_icon="🎓")
 
 st.title("🎓 MatrixDevTesis")
 st.caption("Suite web all-in-one para la gestión, modelado y documentación de proyectos informáticos.")
 
-# Navegación en pestañas organizadas por área metodológica
 tab1, tab2, tab3, tab4 = st.tabs([
     "📋 Requisitos & ERS",
     "📐 Diagramas Visuales",
@@ -24,15 +22,52 @@ tab1, tab2, tab3, tab4 = st.tabs([
 with tab1:
     st.subheader("📋 Documentación Base, Requerimientos e Historias de Usuario")
     
-    col_acta1, col_acta2 = st.columns(2)
+    col_acta1, col_acta2 = st.columns([1, 1])
+    
     with col_acta1:
         nombre_proj = st.text_input("Nombre del Proyecto", "Sistema de Control de Inventario MatrixDev")
-        objetivo = st.text_area("Objetivo Principal del Sistema", "Automatizar el flujo de inventario y optimizar la generación de reportes universitarios.")
-        mvp_scope = st.text_area("Alcance MVP (Producto Mínimo Viable)", "Módulo de autenticación, gestión CRUD de productos y exportación del documento ERS.")
-    
+        objetivo = st.text_area("Objetivo Principal del Sistema", "Automatizar el flujo de inventario y optimizar la generación de reportes universitarios.", height=100)
+        mvp_scope = st.text_area("Alcance MVP (Producto Mínimo Viable)", "Módulo de autenticación, gestión CRUD de productos y exportación del documento ERS.", height=100)
+
+    # Inicialización de DataFrames para Requerimientos
+    if "df_rf" not in st.session_state:
+        st.session_state.df_rf = pd.DataFrame([
+            {"Descripción": "Autenticación con credenciales universitarias."},
+            {"Descripción": "Registro y edición de tareas."},
+            {"Descripción": "Exportación en formato Markdown."}
+        ])
+
+    if "df_rnf" not in st.session_state:
+        st.session_state.df_rnf = pd.DataFrame([
+            {"Descripción": "Tiempo de respuesta menor a 1.5 segundos."},
+            {"Descripción": "Cifrado SSL en todas las peticiones."}
+        ])
+
     with col_acta2:
-        req_funcionales = st.text_area("Requisitos Funcionales (RF)", "RF01: Autenticación con credenciales universitarias.\nRF02: Registro y edición de tareas.\nRF03: Exportación en formato Markdown.")
-        req_no_funcionales = st.text_area("Requisitos No Funcionales (RNF)", "RNF01: Tiempo de respuesta menor a 1.5 segundos.\nRNF02: Cifrado SSL en todas las peticiones.")
+        st.write("**Requisitos Funcionales (RF)** — *Añade filas al final*")
+        rf_edited = st.data_editor(
+            st.session_state.df_rf, 
+            num_rows="dynamic", 
+            use_container_width=True, 
+            key="rf_editor"
+        )
+        
+        st.write("**Requisitos No Funcionales (RNF)** — *Añade filas al final*")
+        rnf_edited = st.data_editor(
+            st.session_state.df_rnf, 
+            num_rows="dynamic", 
+            use_container_width=True, 
+            key="rnf_editor"
+        )
+
+    # Autonumerar automáticamente los IDs (RF01, RF02... / RNF01, RNF02...)
+    df_rf_final = rf_edited.dropna(subset=["Descripción"]).reset_index(drop=True)
+    df_rf_final["ID"] = [f"RF{i+1:02d}" for i in range(len(df_rf_final))]
+    df_rf_final = df_rf_final[["ID", "Descripción"]]
+
+    df_rnf_final = rnf_edited.dropna(subset=["Descripción"]).reset_index(drop=True)
+    df_rnf_final["ID"] = [f"RNF{i+1:02d}" for i in range(len(df_rnf_final))]
+    df_rnf_final = df_rnf_final[["ID", "Descripción"]]
 
     st.markdown("---")
     st.write("**Historias de Usuario (User Stories)**")
@@ -48,34 +83,16 @@ with tab1:
     st.markdown("---")
     st.subheader("📥 Exportación de Entregables")
     
-    # ---------------------------------------------------------
-    # LÓGICA PARA EXPORTAR EXCEL DE REQUERIMIENTOS
-    # ---------------------------------------------------------
-    def parse_requerimientos(texto):
-        """Función auxiliar para convertir el texto en un DataFrame estructurado"""
-        lineas = [linea.strip() for linea in texto.split('\n') if linea.strip()]
-        datos = []
-        for linea in lineas:
-            if ':' in linea:
-                req_id, req_desc = linea.split(':', 1)
-                datos.append({"ID": req_id.strip(), "Descripción": req_desc.strip()})
-            else:
-                datos.append({"ID": "-", "Descripción": linea.strip()})
-        return pd.DataFrame(datos)
-
-    # Convertimos los textos en DataFrames
-    df_rf = parse_requerimientos(req_funcionales)
-    df_rnf = parse_requerimientos(req_no_funcionales)
-
-    # Creamos el archivo Excel en memoria con dos pestañas
+    # Generación de Excel con las dos pestañas ordenadas y autonumeradas
     excel_buffer = io.BytesIO()
     with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-        df_rf.to_excel(writer, index=False, sheet_name="Funcionales")
-        df_rnf.to_excel(writer, index=False, sheet_name="No Funcionales")
+        df_rf_final.to_excel(writer, index=False, sheet_name="Funcionales")
+        df_rnf_final.to_excel(writer, index=False, sheet_name="No Funcionales")
     
-    # ---------------------------------------------------------
-    # GENERACIÓN DEL MARKDOWN ERS
-    # ---------------------------------------------------------
+    # Formatear requerimientos para el documento Markdown (ERS)
+    rf_md_text = "\n".join([f"- **{row['ID']}**: {row['Descripción']}" for _, row in df_rf_final.iterrows()])
+    rnf_md_text = "\n".join([f"- **{row['ID']}**: {row['Descripción']}" for _, row in df_rnf_final.iterrows()])
+
     doc_ers = f"""# ERS & Acta de Constitución: {nombre_proj}
 
 ## 1. Objetivo del Sistema
@@ -85,16 +102,15 @@ with tab1:
 {mvp_scope}
 
 ## 3. Requerimientos Funcionales
-{req_funcionales}
+{rf_md_text}
 
 ## 4. Requerimientos No Funcionales
-{req_no_funcionales}
+{rnf_md_text}
 
 ## 5. Historias de Usuario
 {us_df.to_markdown(index=False)}
 """
     
-    # Botones de descarga alineados en columnas
     col_dl1, col_dl2 = st.columns(2)
     
     with col_dl1:
@@ -113,7 +129,6 @@ with tab1:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True
         )
-
 
 # ==========================================
 # TAB 2: MODELADO VISUAL (MERMAID.JS)
