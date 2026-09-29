@@ -93,17 +93,17 @@ st.title("🎓 MatrixDevTesis")
 st.caption("Suite web all-in-one para la gestión, modelado y documentación de proyectos informáticos.")
 
 tab1, tab2, tab3, tab4 = st.tabs([
-    "📋 Requisitos & ERS",
-    "📐 Diagramas Visuales",
-    "📌 Gestión Estilo Jira & RACI",
-    "📈 Analítica, Ruta Crítica & Montecarlo"
+    " Requisitos & ERS",
+    " Diagramas Visuales",
+    " Gestión Estilo Jira & RACI",
+    " Analítica, Ruta Crítica & Montecarlo"
 ])
 
 # ==========================================
 # TAB 1: REQUISITOS, ACTA Y HISTORIAS DE USUARIO
 # ==========================================
 with tab1:
-    st.subheader("📋 Documentación Base, Requerimientos e Historias de Usuario")
+    st.subheader(" Documentación Base, Requerimientos e Historias de Usuario")
     
     if "nombre_proj" not in st.session_state:
         st.session_state.nombre_proj = "Sistema de Control de Inventario MatrixDev"
@@ -138,7 +138,7 @@ with tab1:
         st.write("**Objetivo Principal del Sistema**")
         st.text_area("Objetivo", key="objetivo_text", height=90, label_visibility="collapsed")
         
-        if st.button("✨ Mejorar Objetivo con IA", key="btn_ai_obj"):
+        if st.button(" Mejorar Objetivo con IA", key="btn_ai_obj"):
             with st.spinner("Optimizando redacción con IA..."):
                 resultado = mejorar_texto_con_ia_limite(st.session_state.objetivo_text, "Objetivo Principal")
                 if resultado:
@@ -150,7 +150,7 @@ with tab1:
         st.write("**Alcance MVP (Producto Mínimo Viable)**")
         st.text_area("Alcance", key="mvp_text", height=90, label_visibility="collapsed")
         
-        if st.button("✨ Mejorar Alcance MVP con IA", key="btn_ai_mvp"):
+        if st.button(" Mejorar Alcance MVP con IA", key="btn_ai_mvp"):
             with st.spinner("Optimizando redacción con IA..."):
                 resultado = mejorar_texto_con_ia_limite(st.session_state.mvp_text, "Alcance MVP")
                 if resultado:
@@ -622,7 +622,7 @@ with tab4:
         st.plotly_chart(fig_gantt, use_container_width=True)
 
     st.markdown("---")
-    st.subheader("🎲 Estimación de Duración de Proyecto con Método de Montecarlo")
+    st.subheader(" Estimación de Duración de Proyecto con Método de Montecarlo")
     
     col_mc_inputs, col_mc_params = st.columns([2, 1])
     
@@ -647,7 +647,7 @@ with tab4:
         st.write("**Configuración de Simulación**")
         n_simulaciones = st.slider("Número de Simulaciones", min_value=500, max_value=10000, value=2500, step=500)
         
-        if st.button("🔄 Ejecutar Simulación Montecarlo", use_container_width=True):
+        if st.button(" Ejecutar Simulación Montecarlo", use_container_width=True):
             st.success("Simulación ejecutada correctamente.")
 
     def simular_montecarlo(df_tasks, N):
@@ -717,7 +717,7 @@ with tab4:
         
         ws.merge_cells("A1:D1")
         title = ws["A1"]
-        title.value = "🎲 REPORTE DE SIMULACIÓN DE MONTECARLO"
+        title.value = " REPORTE DE SIMULACIÓN DE MONTECARLO"
         title.font = Font(name="Calibri", size=14, bold=True, color="FFFFFF")
         title.fill = PatternFill(start_color=purple_color, end_color=purple_color, fill_type="solid")
         title.alignment = Alignment(horizontal="center", vertical="center")
