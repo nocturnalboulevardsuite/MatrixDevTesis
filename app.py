@@ -60,34 +60,34 @@ st.markdown("""
 # ==========================================
 PLANTILLAS_FLUJO = {
     "Autenticación": """graph TD
-A["Usuario"] -->|Credenciales| B["API Login"]
-B -->|Validar| C{"¿Válido?"}
-C -->|Sí| D["Generar Token JWT"]
-C -->|No| E["Error 401 Unauthorized"]""",
+    A[Usuario] -->|Credenciales| B[API Login]
+    B -->|Validar| C{¿Es Válido?}
+    C -->|Sí| D[Generar Token JWT]
+    C -->|No| E[Error 401 Unauthorized]""",
 
     "Procesamiento API": """graph LR
-Cliente["Cliente"] -->|Request POST| Router["Router"]
-Router --> Controller["Controller"]
-Controller -->|Query| DB[("Base de Datos")]
-DB -->|Respuesta| Controller
-Controller -->|JSON| Cliente""",
+    Cliente[Cliente] -->|Request POST| Router[Router]
+    Router --> Controller[Controller]
+    Controller -->|Query| DB[(Base de Datos)]
+    DB -->|Respuesta| Controller
+    Controller -->|JSON| Cliente""",
 
     "Secuencia de Usuario": """sequenceDiagram
-autonumber
-actor Cliente
-participant Servidor
-participant BD as Base de Datos
+    autonumber
+    actor Cliente
+    participant Servidor
+    participant BD as Base de Datos
 
-Cliente->>Servidor: POST /login
-Servidor->>BD: Consulta Usuario
-BD-->>Servidor: Datos OK
-Servidor-->>Cliente: 200 OK + Token""",
+    Cliente->>Servidor: POST /login
+    Servidor->>BD: Consulta Usuario
+    BD-->>Servidor: Datos OK
+    Servidor-->>Cliente: 200 OK + Token""",
 
     "Crear desde cero": """graph TD
-A["Inicio"] --> B["Tu Nuevo Proceso"]
-B --> C{"¿Aprobado?"}
-C -->|Sí| D["Resultado Éxito"]
-C -->|No| E["Resultado Fallo"]"""
+    A[Inicio] --> B[Tu Nuevo Proceso]
+    B --> C{¿Aprobado?}
+    C -->|Sí| D[Resultado Éxito]
+    C -->|No| E[Resultado Fallo]"""
 }
 
 if "nombre_proj" not in st.session_state:
@@ -159,19 +159,20 @@ def cambiar_plantilla_flujo():
     sel = st.session_state.select_tipo_flujo
     if sel in PLANTILLAS_FLUJO:
         st.session_state.flujo_codigo = PLANTILLAS_FLUJO[sel]
+        st.session_state.txt_flujo_code = PLANTILLAS_FLUJO[sel]
 
 def generar_mermaid_edt(edt_items, nombre_proyecto):
-    proj_name = str(nombre_proyecto).replace('"', '').replace("'", "")
+    proj_name = str(nombre_proyecto).replace('"', '').replace("'", "").replace("$", "")
     lines = ["graph TD", f'    ROOT["📦 {proj_name}"]']
     
     fases = {}
     for item in edt_items:
-        fase = str(item.get("Fase", "Sin Fase")).strip().replace('"', '')
-        subfase = str(item.get("Subfase", "")).strip().replace('"', '')
-        paquete = str(item.get("Paquete", "Tarea")).strip().replace('"', '')
+        fase = str(item.get("Fase", "Sin Fase")).strip().replace('"', '').replace("'", "")
+        subfase = str(item.get("Subfase", "")).strip().replace('"', '').replace("'", "")
+        paquete = str(item.get("Paquete", "Tarea")).strip().replace('"', '').replace("'", "")
         horas = float(item.get("Horas", 0))
         costo = float(item.get("Costo", 0))
-        doc = str(item.get("Documentos", "")).strip().replace('"', '')
+        doc = str(item.get("Documentos", "")).strip().replace('"', '').replace("'", "")
         
         if fase not in fases:
             fases[fase] = {}
@@ -434,9 +435,10 @@ def generar_word_mementomori():
 
     # 8. CONCLUSIONES
     doc.add_heading("8. Conclusiones y Recomendaciones Finales", level=1)
+    p85_val = st.session_state.get("p85_val", 25.0)
     doc.add_paragraph(
         f"El proyecto '{st.session_state.nombre_proj}' cuenta con una base metodológica y técnica sólida. "
-        f"Se recomienda formalizar el compromiso de entrega considerando el percentil 85 de Monte Carlo ({p85:.1f} días) "
+        f"Se recomienda formalizar el compromiso de entrega considerando la simulación de Monte Carlo "
         "y monitorear de forma continua los requisitos no funcionales y la matriz de riesgos para asegurar el éxito del proyecto."
     )
 
@@ -578,9 +580,9 @@ with tab1:
 with tab2:
     st.markdown("### Arquitectura Visual")
     default_mermaid = """graph TD
-    A["Inicio"] --> B{"Validar"}
-    B -->|Sí| C["Éxito"]
-    B -->|No| D["Error"]"""
+    A[Inicio] --> B{Validar}
+    B -->|Sí| C[Éxito]
+    B -->|No| D[Error]"""
     
     codigo_mermaid = st.text_area("Sintaxis Mermaid", value=default_mermaid, height=120)
     st_mermaid(codigo_mermaid)
@@ -649,12 +651,13 @@ with tab4:
         st.plotly_chart(fig, use_container_width=True)
         
         p85 = np.percentile(datos_sim, 85)
+        st.session_state.p85_val = p85
         st.metric("Estimación con 85% de Confianza", f"{p85:.1f} Días")
     else:
         st.error("Asegúrate de que: Optimista ≤ Más Probable ≤ Pesimista.")
 
 # ------------------------------------------
-# TAB 5: FLUJOS
+# TAB 5: FLUJOS (CORREGIDO)
 # ------------------------------------------
 with tab5:
     st.markdown("### Diagramas de Flujo y Secuencia")
@@ -666,12 +669,13 @@ with tab5:
         on_change=cambiar_plantilla_flujo
     )
     
-    st.session_state.flujo_codigo = st.text_area(
+    codigo_actualizado = st.text_area(
         "Código del Diagrama (Editable)", 
         value=st.session_state.flujo_codigo, 
         height=180,
         key="txt_flujo_code"
     )
+    st.session_state.flujo_codigo = codigo_actualizado
     
     st.markdown("#### Vista Previa del Diagrama")
     st_mermaid(st.session_state.flujo_codigo)
@@ -840,7 +844,7 @@ with tab7:
     r_prom = df_r["Severidad"].mean() if not df_r.empty else 0.0
 
     mr1, mr2, mr3 = st.columns(3)
-    mr1.metric("⚠️ Total de Riesgos", r_total)
+    mr1.metric("⚠️️ Total de Riesgos", r_total)
     mr2.metric("🔥 Riesgos Altos / Críticos", r_criticos)
     mr3.metric("📊 Severidad Promedio", f"{r_prom:.1f} / 25")
 
