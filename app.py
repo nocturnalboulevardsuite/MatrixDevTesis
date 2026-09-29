@@ -85,7 +85,7 @@ if "edt_list" not in st.session_state:
         {"Fase": "1. Inicio", "Paquete": "Levantamiento de Requisitos", "Horas": 20},
         {"Fase": "2. Desarrollo", "Paquete": "Backend & Base de Datos", "Horas": 60},
         {"Fase": "2. Desarrollo", "Paquete": "Frontend UI", "Horas": 40},
-        {"Fase": "3. Cierre", "Paquete": "Despliegue y PRuebas", "Horas": 15}
+        {"Fase": "3. Cierre", "Paquete": "Despliegue y Pruebas", "Horas": 15}
     ]
 if "riesgos_list" not in st.session_state:
     st.session_state.riesgos_list = [
@@ -235,15 +235,14 @@ with tab1:
             st.rerun()
 
 # ------------------------------------------
-# TAB 2: MODELADO (CORREGIDO)
+# TAB 2: MODELADO
 # ------------------------------------------
 with tab2:
     st.markdown("### Arquitectura Visual")
-    # Sintaxis corregida usando |Texto| en lugar de -- Texto -->
     default_mermaid = """graph TD
-    A[Inicio] --> B{Validar}
-    B -->|Sí| C[Éxito]
-    B -->|No| D[Error]"""
+    A["Inicio"] --> B{"Validar"}
+    B -->|Sí| C["Éxito"]
+    B -->|No| D["Error"]"""
     
     codigo_mermaid = st.text_area("Sintaxis Mermaid", value=default_mermaid, height=120)
     st_mermaid(codigo_mermaid)
@@ -317,7 +316,7 @@ with tab4:
         st.error("Asegúrate de que: Optimista ≤ Más Probable ≤ Pesimista.")
 
 # ------------------------------------------
-# TAB 5: FLUJOS
+# TAB 5: FLUJOS (CORREGIDO)
 # ------------------------------------------
 with tab5:
     st.markdown("### Diagramas de Flujo y Secuencia")
@@ -325,23 +324,27 @@ with tab5:
     
     if tipo_flujo == "Autenticación":
         code_flujo = """graph TD
-        A[Usuario] -->|Credenciales| B[API Login]
-        B -->|Validar| C{¿Válido?}
-        C -->|Sí| D[Generar Token JWT]
-        C -->|No| E[Error 401 Unauthorized]"""
+        A["Usuario"] -->|Credenciales| B["API Login"]
+        B -->|Validar| C{"¿Válido?"}
+        C -->|Sí| D["Generar Token JWT"]
+        C -->|No| E["Error 401 Unauthorized"]"""
     elif tipo_flujo == "Procesamiento API":
         code_flujo = """graph LR
-        Cliente -->|Request POST| Router
-        Router --> Controller
-        Controller -->|Query| DB[(Base de Datos)]
+        Cliente["Cliente"] -->|Request POST| Router["Router"]
+        Router --> Controller["Controller"]
+        Controller -->|Query| DB[("Base de Datos")]
         DB -->|Respuesta| Controller
         Controller -->|JSON| Cliente"""
     else:
         code_flujo = """sequenceDiagram
         autonumber
+        actor Cliente
+        participant Servidor
+        participant BD as Base de Datos
+
         Cliente->>Servidor: POST /login
-        Servidor-->>BaseDeDatos: Consulta Usuario
-        BaseDeDatos-->>Servidor: Datos Ok
+        Servidor->>BD: Consulta Usuario
+        BD-->>Servidor: Datos OK
         Servidor-->>Cliente: 200 OK + Token"""
 
     st_mermaid(code_flujo)
