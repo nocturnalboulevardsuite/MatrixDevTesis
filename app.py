@@ -61,8 +61,41 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. INICIALIZACIÓN DE VARIABLES DE ESTADO
+# 2. PLANTILLAS DE FLUJOS Y ESTADO INICIAL
 # ==========================================
+PLANTILLAS_FLUJO = {
+    "Autenticación": """graph TD
+A["Usuario"] -->|Credenciales| B["API Login"]
+B -->|Validar| C{"¿Válido?"}
+C -->|Sí| D["Generar Token JWT"]
+C -->|No| E["Error 401 Unauthorized"]""",
+
+    "Procesamiento API": """graph LR
+Cliente["Cliente"] -->|Request POST| Router["Router"]
+Router --> Controller["Controller"]
+Controller -->|Query| DB[("Base de Datos")]
+DB -->|Respuesta| Controller
+Controller -->|JSON| Cliente""",
+
+    "Secuencia de Usuario": """sequenceDiagram
+autonumber
+actor Cliente
+participant Servidor
+participant BD as Base de Datos
+
+Cliente->>Servidor: POST /login
+Servidor->>BD: Consulta Usuario
+BD-->>Servidor: Datos OK
+Servidor-->>Cliente: 200 OK + Token""",
+
+    "Crear desde cero": """graph TD
+A["Inicio"] --> B["Tu Nuevo Proceso"]
+B --> C{"¿Aprobado?"}
+C -->|Sí| D["Resultado Éxito"]
+C -->|No| E["Resultado Fallo"]"""
+}
+
+# Inicialización de estado
 if "nombre_proj" not in st.session_state:
     st.session_state.nombre_proj = "MatrixDev Core"
 if "integrantes" not in st.session_state:
@@ -93,6 +126,14 @@ if "riesgos_list" not in st.session_state:
         {"Riesgo": "Falla en servidor cloud", "Probabilidad": 2, "Impacto": 5},
         {"Riesgo": "Incompatibilidad de navegador", "Probabilidad": 1, "Impacto": 2}
     ]
+
+if "flujo_codigo" not in st.session_state:
+    st.session_state.flujo_codigo = PLANTILLAS_FLUJO["Autenticación"]
+
+def cambiar_plantilla_flujo():
+    sel = st.session_state.select_tipo_flujo
+    if sel in PLANTILLAS_FLUJO:
+        st.session_state.flujo_codigo = PLANTILLAS_FLUJO[sel]
 
 # ==========================================
 # 3. FUNCIONES DE GENERACIÓN DE DOCUMENTOS
@@ -316,38 +357,31 @@ with tab4:
         st.error("Asegúrate de que: Optimista ≤ Más Probable ≤ Pesimista.")
 
 # ------------------------------------------
-# TAB 5: FLUJOS (CORREGIDO)
+# TAB 5: FLUJOS (EDITABLE Y CONSTRUCTOR)
 # ------------------------------------------
 with tab5:
-    st.markdown("### Diagramas de Flujo y Secuencia")
-    tipo_flujo = st.selectbox("Seleccionar Plantilla de Flujo", ["Autenticación", "Procesamiento API", "Secuencia de Usuario"])
+    st.markdown("### Diseñador y Editor de Flujos")
     
-    if tipo_flujo == "Autenticación":
-        code_flujo = """graph TD
-        A["Usuario"] -->|Credenciales| B["API Login"]
-        B -->|Validar| C{"¿Válido?"}
-        C -->|Sí| D["Generar Token JWT"]
-        C -->|No| E["Error 401 Unauthorized"]"""
-    elif tipo_flujo == "Procesamiento API":
-        code_flujo = """graph LR
-        Cliente["Cliente"] -->|Request POST| Router["Router"]
-        Router --> Controller["Controller"]
-        Controller -->|Query| DB[("Base de Datos")]
-        DB -->|Respuesta| Controller
-        Controller -->|JSON| Cliente"""
-    else:
-        code_flujo = """sequenceDiagram
-        autonumber
-        actor Cliente
-        participant Servidor
-        participant BD as Base de Datos
-
-        Cliente->>Servidor: POST /login
-        Servidor->>BD: Consulta Usuario
-        BD-->>Servidor: Datos OK
-        Servidor-->>Cliente: 200 OK + Token"""
-
-    st_mermaid(code_flujo)
+    st.selectbox(
+        "Cargar Plantilla Base de Flujo", 
+        list(PLANTILLAS_FLUJO.keys()), 
+        key="select_tipo_flujo",
+        on_change=cambiar_plantilla_flujo
+    )
+    
+    st.markdown("**Edita o escribe tu propio diagrama (Sintaxis Mermaid):**")
+    st.session_state.flujo_codigo = st.text_area(
+        "Código del Flujo", 
+        value=st.session_state.flujo_codigo, 
+        height=160, 
+        label_visibility="collapsed"
+    )
+    
+    st.write("---")
+    
+    # Renderizado interactivo del flujo
+    if st.session_state.flujo_codigo.strip():
+        st_mermaid(st.session_state.flujo_codigo)
 
 # ------------------------------------------
 # TAB 6: EDT (WBS)
