@@ -15,7 +15,7 @@ from docx.shared import Pt, RGBColor
 # ==========================================
 # 1. CONFIGURACIÓN DE PÁGINA Y ESTILOS
 # ==========================================
-st.set_page_config(page_title="MatrixDev Tesis", layout="centered", page_icon="🍷")
+st.set_page_config(page_title="MatrixDev Tesis", layout="wide", page_icon="🍷")
 
 st.markdown("""
     <style>
@@ -48,11 +48,6 @@ st.markdown("""
         box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
     }
 
-    /* Estilo de los contenedores de items */
-    div[data-testid="stHorizontalBlock"] {
-        align-items: center;
-    }
-
     /* Ocultar elementos nativos innecesarios */
     header {visibility: hidden;}
     #MainMenu {visibility: hidden;}
@@ -61,7 +56,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. PLANTILLAS DE FLUJOS Y ESTADO INICIAL
+# 2. PLANTILLAS Y VARIABLES DE ESTADO
 # ==========================================
 PLANTILLAS_FLUJO = {
     "Autenticación": """graph TD
@@ -95,7 +90,6 @@ C -->|Sí| D["Resultado Éxito"]
 C -->|No| E["Resultado Fallo"]"""
 }
 
-# Inicialización de estado
 if "nombre_proj" not in st.session_state:
     st.session_state.nombre_proj = "MatrixDev Core"
 if "integrantes" not in st.session_state:
@@ -134,6 +128,30 @@ def cambiar_plantilla_flujo():
     sel = st.session_state.select_tipo_flujo
     if sel in PLANTILLAS_FLUJO:
         st.session_state.flujo_codigo = PLANTILLAS_FLUJO[sel]
+
+def generar_mermaid_edt(edt_items, nombre_proyecto):
+    proj_name = nombre_proyecto.replace('"', '').replace("'", "")
+    lines = ["graph TD", f'    ROOT["📦 {proj_name}"]']
+    
+    fases = {}
+    for item in edt_items:
+        fase = str(item.get("Fase", "Sin Fase")).replace('"', '')
+        paquete = str(item.get("Paquete", "Tarea")).replace('"', '')
+        horas = item.get("Horas", 0)
+        if fase not in fases:
+            fases[fase] = []
+        fases[fase].append((paquete, horas))
+    
+    for idx_f, (fase_name, pkgs) in enumerate(fases.items()):
+        fase_id = f"F{idx_f}"
+        total_fase_hrs = sum(h for _, h in pkgs)
+        lines.append(f'    ROOT --> {fase_id}["📂 {fase_name}<br/><i>Total: {total_fase_hrs} hrs</i>"]')
+        
+        for idx_p, (pkg_name, hrs) in enumerate(pkgs):
+            pkg_id = f"P{idx_f}_{idx_p}"
+            lines.append(f'    {fase_id} --> {pkg_id}["📄 {pkg_name}<br/>⏱️ {hrs} hrs"]')
+            
+    return "\n".join(lines)
 
 # ==========================================
 # 3. FUNCIONES DE GENERACIÓN DE DOCUMENTOS
@@ -357,51 +375,156 @@ with tab4:
         st.error("Asegúrate de que: Optimista ≤ Más Probable ≤ Pesimista.")
 
 # ------------------------------------------
-# TAB 5: FLUJOS (EDITABLE Y CONSTRUCTOR)
+# TAB 5: FLUJOS
 # ------------------------------------------
 with tab5:
-    st.markdown("### Diseñador y Editor de Flujos")
+    st.markdown("### Diagramas de Flujo y Secuencia")
     
     st.selectbox(
-        "Cargar Plantilla Base de Flujo", 
-        list(PLANTILLAS_FLUJO.keys()), 
+        "Seleccionar Plantilla de Flujo", 
+        options=list(PLANTILLAS_FLUJO.keys()),
         key="select_tipo_flujo",
         on_change=cambiar_plantilla_flujo
     )
     
-    st.markdown("**Edita o escribe tu propio diagrama (Sintaxis Mermaid):**")
     st.session_state.flujo_codigo = st.text_area(
-        "Código del Flujo", 
+        "Código del Diagrama (Editable)", 
         value=st.session_state.flujo_codigo, 
-        height=160, 
-        label_visibility="collapsed"
+        height=180,
+        key="txt_flujo_code"
     )
     
-    st.write("---")
-    
-    # Renderizado interactivo del flujo
-    if st.session_state.flujo_codigo.strip():
-        st_mermaid(st.session_state.flujo_codigo)
+    st.markdown("#### Vista Previa del Diagrama")
+    st_mermaid(st.session_state.flujo_codigo)
 
 # ------------------------------------------
-# TAB 6: EDT (WBS)
+# TAB 6: EDT (WBS) - REVISIÓN MEJORADA
 # ------------------------------------------
 with tab6:
     st.markdown("### Estructura de Desglose de Trabajo (EDT / WBS)")
     
+    # TUTORIAL Y GUÍA DE USO SUPERIOR
+    with st.expander("📖 **Manual & Guía Rápida: ¿Cómo funciona y cómo usar la EDT?**", expanded=True):
+        st.markdown(f"""
+        **¿Qué es una EDT (Estructura de Desglose de Trabajo / WBS)?**  
+        Es la representación jerárquica de todo el trabajo necesario para completar el proyecto. Divide un proyecto complejo en partes pequeñas y manejables para estimar tiempos, costos y responsabilidades sin perder la visión general.
+
+        ---
+        #### 💡 Guía de Uso Paso a Paso:
+        1. **Estructura Jerárquica por Niveles:**
+           * 📦 **Proyecto (Nivel 0 - Raíz):** Representa el entregable total del sistema (*{st.session_state.nombre_proj}*).
+           * 📂 **Fase (Nivel 1):** Etapas principales del ciclo de vida del proyecto (ej: *1. Inicio*, *2. Desarrollo*, *3. Cierre*).
+           * 📄 **Paquete de Trabajo (Nivel 2):** Unidades de trabajo específicas con su tiempo estimado en horas.
+
+        2. **Cómo Añadir nuevos Paquetes de Trabajo:**
+           * Utiliza el formulario **"➕ Agregar Paquete de Trabajo"** para ingresar la Fase, el Nombre del Paquete y la Estimación en Horas.
+           * Presiona **Añadir Paquete** para actualizar automáticamente el árbol jerárquico y los indicadores.
+
+        3. **Cómo Modificar o Eliminar:**
+           * Modifica directamente los datos en la sección **"📝 Lista y Edición Dinámica de la EDT"**.
+           * Haz clic en el botón 🗑️ para remover un paquete que ya no necesites.
+
+        4. **Interpretación de Gráficos:**
+           * **Árbol Jerárquico:** Muestra visualmente las relaciones padre-hijo del proyecto con el conteo de horas sumado por fase.
+           * **Gráfico de Donut:** Indica qué porcentaje de la carga horaria total absorbe cada fase del proyecto.
+        """)
+
     df_edt = pd.DataFrame(st.session_state.edt_list)
-    if not df_edt.empty:
-        fig_edt = px.treemap(
-            df_edt, 
-            path=['Fase', 'Paquete'], 
-            values='Horas',
-            title="Distribución del Esfuerzo (Horas)",
-            color_discrete_sequence=px.colors.qualitative.Dark24
-        )
-        fig_edt.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color='#f4ecec')
-        st.plotly_chart(fig_edt, use_container_width=True)
     
-    st.dataframe(df_edt, use_container_width=True)
+    # METRICAS DE RESUMEN
+    if not df_edt.empty:
+        total_horas = df_edt["Horas"].sum()
+        total_paquetes = len(df_edt)
+        total_fases = df_edt["Fase"].nunique()
+    else:
+        total_horas = 0
+        total_paquetes = 0
+        total_fases = 0
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("⏳ Total Horas Estimadas", f"{total_horas} hrs")
+    m2.metric("📄 Total Paquetes de Trabajo", total_paquetes)
+    m3.metric("📂 Fases Definidas", total_fases)
+    
+    st.write("---")
+    
+    # DIAGRAMA DE ÁRBOL JERÁRQUICO (WBS VISUAL EN MERMAID)
+    st.markdown("#### 🌳 Diagrama de Árbol Jerárquico (WBS Visual)")
+    if not df_edt.empty:
+        mermaid_edt_code = generar_mermaid_edt(st.session_state.edt_list, st.session_state.nombre_proj)
+        st_mermaid(mermaid_edt_code)
+    else:
+        st.info("No hay paquetes agregados para mostrar el árbol jerárquico.")
+
+    st.write("---")
+
+    # DISTRIBUCIÓN Y FORMULARIO DE CREACIÓN
+    col_graph, col_manage = st.columns([1, 1])
+
+    with col_graph:
+        st.markdown("#### 📊 Distribución del Esfuerzo por Fase")
+        if not df_edt.empty:
+            df_fases = df_edt.groupby("Fase", as_index=False)["Horas"].sum()
+            fig_donut = px.pie(
+                df_fases, 
+                names='Fase', 
+                values='Horas', 
+                hole=0.4,
+                color_discrete_sequence=px.colors.qualitative.Dark24
+            )
+            fig_donut.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)', 
+                plot_bgcolor='rgba(0,0,0,0)', 
+                font_color='#f4ecec',
+                margin=dict(l=10, r=10, t=30, b=10)
+            )
+            st.plotly_chart(fig_donut, use_container_width=True)
+        else:
+            st.info("Agrega datos para generar el gráfico de distribución.")
+
+    with col_manage:
+        st.markdown("#### ➕ Agregar Paquete de Trabajo")
+        with st.form("form_add_edt", clear_on_submit=True):
+            fase_in = st.text_input("Fase del Proyecto", placeholder="Ej: 2. Desarrollo")
+            paquete_in = st.text_input("Paquete de Trabajo", placeholder="Ej: Módulo de Reportes")
+            horas_in = st.number_input("Horas Estimadas", min_value=1, value=10, step=1)
+            
+            btn_add_edt = st.form_submit_button("Añadir Paquete", use_container_width=True)
+            if btn_add_edt:
+                if fase_in.strip() and paquete_in.strip():
+                    st.session_state.edt_list.append({
+                        "Fase": fase_in.strip(),
+                        "Paquete": paquete_in.strip(),
+                        "Horas": int(horas_in)
+                    })
+                    st.rerun()
+                else:
+                    st.error("Por favor completa los campos de Fase y Paquete.")
+
+    st.write("---")
+    st.markdown("#### 📝 Lista y Edición Dinámica de la EDT")
+    
+    if not st.session_state.edt_list:
+        st.info("La estructura de desglose de trabajo está vacía.")
+    else:
+        edt_del_idx = None
+        for i, item in enumerate(st.session_state.edt_list):
+            col_f, col_p, col_h, col_del = st.columns([2.5, 3.5, 1.5, 0.8])
+            
+            fase_val = col_f.text_input(f"Fase {i}", value=item["Fase"], key=f"edt_fase_{i}", label_visibility="collapsed")
+            pkg_val = col_p.text_input(f"Paquete {i}", value=item["Paquete"], key=f"edt_pkg_{i}", label_visibility="collapsed")
+            hrs_val = col_h.number_input(f"Horas {i}", value=int(item["Horas"]), min_value=1, step=1, key=f"edt_hrs_{i}", label_visibility="collapsed")
+            
+            st.session_state.edt_list[i]["Fase"] = fase_val
+            st.session_state.edt_list[i]["Paquete"] = pkg_val
+            st.session_state.edt_list[i]["Horas"] = int(hrs_val)
+            
+            if col_del.button("🗑️", key=f"del_edt_{i}"):
+                edt_del_idx = i
+
+        if edt_del_idx is not None:
+            st.session_state.edt_list.pop(edt_del_idx)
+            st.rerun()
 
 # ------------------------------------------
 # TAB 7: RIESGOS
