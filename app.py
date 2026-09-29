@@ -19,7 +19,7 @@ from docx.oxml.ns import nsdecls
 # 1. Configuración centrada y minimalista
 st.set_page_config(page_title="MatrixDevTesis", layout="centered", page_icon="🍷")
 
-# 2. Inyección de CSS (Tema Vino Mate Épico)
+# 2. Estilos personalizados
 st.markdown("""
     <style>
     /* Fondo principal y color de texto */
@@ -36,7 +36,7 @@ st.markdown("""
         text-align: center;
     }
     
-    /* Botones principales y de formulario */
+    /* Botones */
     .stButton>button, .stFormSubmitButton>button {
         background-color: #5c1e28;
         color: #ffffff !important;
@@ -51,7 +51,12 @@ st.markdown("""
         box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
     }
 
-    /* Ocultar elementos innecesarios */
+    /* Estilo de los contenedores de items */
+    div[data-testid="stHorizontalBlock"] {
+        align-items: center;
+    }
+
+    /* Ocultar elementos nativos innecesarios */
     header {visibility: hidden;}
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
@@ -68,7 +73,7 @@ if "integrantes" not in st.session_state:
 if "objetivo_text" not in st.session_state:
     st.session_state.objetivo_text = "Automatizar el flujo de inventario con una arquitectura minimalista."
 
-# Listas principales de requisitos
+# Listas nativas de datos
 if "rf_list" not in st.session_state:
     st.session_state.rf_list = ["Autenticación OAuth2.", "CRUD de usuarios."]
 if "rnf_list" not in st.session_state:
@@ -238,7 +243,13 @@ with tab3:
         for i, t in enumerate(st.session_state.kanban_tasks):
             col_txt, col_sel, col_d = st.columns([3, 2, 0.8])
             updated_text = col_txt.text_input(f"kt_{i}", value=t["Tarea"], label_visibility="collapsed", key=f"kt_in_{i}")
-            updated_status = col_sel.selectbox(f"ks_{i}", ["Pendiente", "En Proceso", "Completado"], index=["Pendiente", "En Proceso", "Completado"].index(t["Estado"]), label_visibility="collapsed", key=f"ks_in_{i}")
+            updated_status = col_sel.selectbox(
+                f"ks_{i}", 
+                ["Pendiente", "En Proceso", "Completado"], 
+                index=["Pendiente", "En Proceso", "Completado"].index(t["Estado"]), 
+                label_visibility="collapsed", 
+                key=f"ks_in_{i}"
+            )
             
             st.session_state.kanban_tasks[i]["Tarea"] = updated_text
             st.session_state.kanban_tasks[i]["Estado"] = updated_status
