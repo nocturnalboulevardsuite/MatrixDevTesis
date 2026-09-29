@@ -61,6 +61,7 @@ st.markdown("""
 # ==========================================
 # INICIALIZACIÓN DE VARIABLES DE ESTADO
 # ==========================================
+# Se inicializan los DataFrames asegurando que el tipo de dato sea explícitamente string
 if "nombre_proj" not in st.session_state:
     st.session_state.nombre_proj = "MatrixDev Core"
 if "integrantes" not in st.session_state:
@@ -68,16 +69,16 @@ if "integrantes" not in st.session_state:
 if "objetivo_text" not in st.session_state:
     st.session_state.objetivo_text = "Automatizar el flujo de inventario con una arquitectura minimalista."
 if "df_rf" not in st.session_state:
-    st.session_state.df_rf = pd.DataFrame([{"Descripción": "Autenticación OAuth2."}, {"Descripción": "CRUD de usuarios."}])
+    st.session_state.df_rf = pd.DataFrame({"Descripción": ["Autenticación OAuth2.", "CRUD de usuarios."]}, dtype=str)
 if "df_rnf" not in st.session_state:
-    st.session_state.df_rnf = pd.DataFrame([{"Descripción": "Latencia < 200ms."}, {"Descripción": "Cifrado AES-256 en base de datos."}])
+    st.session_state.df_rnf = pd.DataFrame({"Descripción": ["Latencia < 200ms.", "Cifrado AES-256 en base de datos."]}, dtype=str)
 if "kanban_tasks" not in st.session_state:
-    st.session_state.kanban_tasks = pd.DataFrame([{"Tarea": "Modelo BD", "Estado": "Completado"}])
+    st.session_state.kanban_tasks = pd.DataFrame({"Tarea": ["Modelo BD"], "Estado": ["Completado"]}, dtype=str)
 if "df_mc_tasks" not in st.session_state:
     st.session_state.df_mc_tasks = pd.DataFrame([{"Tarea": "Dev Backend", "Optimista": 5, "Mas_Probable": 10, "Pesimista": 20}])
 
 # ==========================================
-# FUNCIONES DE GENERACIÓN DE DOCUMENTOS (Ocultas para limpiar el código principal)
+# FUNCIONES DE GENERACIÓN DE DOCUMENTOS
 # ==========================================
 def generar_word_ers():
     doc = Document()
@@ -143,12 +144,14 @@ with tab1:
     st.session_state.objetivo_text = st.text_area("Objetivo Principal", st.session_state.objetivo_text, height=80)
     
     st.markdown("### Requisitos Funcionales")
+    st.info("💡 **Tip:** Para añadir un requisito, escribe en la última fila gris y presiona **Enter** en tu teclado.")
     st.session_state.df_rf = st.data_editor(
         st.session_state.df_rf, 
         num_rows="dynamic", 
         use_container_width=True,
+        hide_index=True, # Ocultar índice para interfaz más limpia
         column_config={
-            "Descripción": st.column_config.TextColumn("Descripción", default="")
+            "Descripción": st.column_config.TextColumn("Descripción", default="", required=True)
         },
         key="editor_rf"
     )
@@ -158,8 +161,9 @@ with tab1:
         st.session_state.df_rnf, 
         num_rows="dynamic", 
         use_container_width=True,
+        hide_index=True,
         column_config={
-            "Descripción": st.column_config.TextColumn("Descripción", default="")
+            "Descripción": st.column_config.TextColumn("Descripción", default="", required=True)
         },
         key="editor_rnf"
     )
@@ -178,9 +182,10 @@ with tab3:
         st.session_state.kanban_tasks, 
         num_rows="dynamic", 
         use_container_width=True,
+        hide_index=True,
         column_config={
             "Tarea": st.column_config.TextColumn("Tarea", default=""),
-            "Estado": st.column_config.SelectboxColumn("Estado", options=["Pendiente", "En Proceso", "Completado"])
+            "Estado": st.column_config.SelectboxColumn("Estado", options=["Pendiente", "En Proceso", "Completado"], required=True)
         }
     )
 
