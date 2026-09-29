@@ -13,45 +13,85 @@ from docx import Document
 from docx.shared import Pt, RGBColor
 
 # ==========================================
-# 1. CONFIGURACIÓN DE PÁGINA Y ESTILOS
+# 1. CONFIGURACIÓN DE PÁGINA Y TEMAS DINÁMICOS
 # ==========================================
 st.set_page_config(page_title="MatrixDev Tesis", layout="wide", page_icon="🍷")
 
-st.markdown("""
+# Inicialización del tema en session_state
+if "tema" not in st.session_state:
+    st.session_state.tema = "vino"  # Opciones: "vino", "oscuro", "claro"
+
+# Configuración de colores según el tema seleccionado
+if st.session_state.tema == "oscuro":
+    bg_color = "#18181b"
+    text_color = "#f4f4f5"
+    heading_color = "#38bdf8"
+    sub_color = "#a1a1aa"
+    btn_bg = "#27272a"
+    btn_border = "#3f3f46"
+    btn_hover = "#3f3f46"
+    graph_text = "#f4f4f5"
+    graph_bar = "#38bdf8"
+    grid_color = "#27272a"
+elif st.session_state.tema == "claro":
+    bg_color = "#f8fafc"
+    text_color = "#0f172a"
+    heading_color = "#2563eb"
+    sub_color = "#64748b"
+    btn_bg = "#e2e8f0"
+    btn_border = "#cbd5e1"
+    btn_hover = "#cbd5e1"
+    graph_text = "#0f172a"
+    graph_bar = "#2563eb"
+    grid_color = "#e2e8f0"
+else:  # "vino" (Por defecto)
+    bg_color = "#2c0f14"
+    text_color = "#f4ecec"
+    heading_color = "#e09f9f"
+    sub_color = "#a68a8d"
+    btn_bg = "#5c1e28"
+    btn_border = "#8a2d3b"
+    btn_hover = "#8a2d3b"
+    graph_text = "#f4ecec"
+    graph_bar = "#e09f9f"
+    grid_color = "#442026"
+
+# Inyección de CSS dinámico
+st.markdown(f"""
     <style>
     /* Fondo principal y color de texto */
-    .stApp {
-        background-color: #2c0f14;
-        color: #f4ecec;
+    .stApp {{
+        background-color: {bg_color};
+        color: {text_color};
         font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    }
+    }}
     
     /* Encabezados */
-    h1, h2, h3 {
-        color: #e09f9f !important;
+    h1, h2, h3 {{
+        color: {heading_color} !important;
         font-weight: 300 !important;
         text-align: center;
-    }
+    }}
     
     /* Botones */
-    .stButton>button, .stFormSubmitButton>button {
-        background-color: #5c1e28;
-        color: #ffffff !important;
-        border: 1px solid #8a2d3b;
+    .stButton>button, .stFormSubmitButton>button {{
+        background-color: {btn_bg};
+        color: {text_color} !important;
+        border: 1px solid {btn_border};
         border-radius: 8px;
         transition: 0.3s;
         font-weight: bold;
-    }
-    .stButton>button:hover, .stFormSubmitButton>button:hover {
-        background-color: #8a2d3b;
-        border-color: #ffffff;
-        box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
-    }
+    }}
+    .stButton>button:hover, .stFormSubmitButton>button:hover {{
+        background-color: {btn_hover};
+        border-color: {heading_color};
+        box-shadow: 0px 4px 10px rgba(0,0,0,0.2);
+    }}
 
     /* Ocultar elementos nativos innecesarios */
-    header {visibility: hidden;}
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
+    header {{visibility: hidden;}}
+    #MainMenu {{visibility: hidden;}}
+    footer {{visibility: hidden;}}
     </style>
 """, unsafe_allow_html=True)
 
@@ -484,10 +524,29 @@ def generar_excel_estilizado():
     return output.getvalue()
 
 # ==========================================
-# 4. INTERFAZ PRINCIPAL
+# 4. INTERFAZ PRINCIPAL Y CONMUTADOR DE TEMA
 # ==========================================
 st.title("✦ MatrixDev ✦")
-st.markdown("<p style='text-align: center; color: #a68a8d;'>Gestión y Arquitectura de Proyectos</p>", unsafe_allow_html=True)
+st.markdown(f"<p style='text-align: center; color: {sub_color};'>Gestión y Arquitectura de Proyectos</p>", unsafe_allow_html=True)
+
+# BOTONES DE CAMBIO DE TEMA VISUAL
+col_t_space, col_btn1, col_btn2, col_btn3 = st.columns([3, 1, 1, 1])
+
+with col_btn1:
+    if st.button("🍷 Vino Tinto", use_container_width=True):
+        st.session_state.tema = "vino"
+        st.rerun()
+
+with col_btn2:
+    if st.button("🌙 Gris Oscuro", use_container_width=True):
+        st.session_state.tema = "oscuro"
+        st.rerun()
+
+with col_btn3:
+    if st.button("☀️ Blanco", use_container_width=True):
+        st.session_state.tema = "claro"
+        st.rerun()
+
 st.write("---")
 
 tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab_full = st.tabs([
@@ -646,8 +705,8 @@ with tab4:
     if opt <= prob <= pes:
         datos_sim = np.random.triangular(left=opt, mode=prob, right=pes, size=simulaciones)
         
-        fig = px.histogram(datos_sim, nbins=30, title="Distribución de Duración (Días)", labels={'value': 'Días'}, color_discrete_sequence=['#e09f9f'])
-        fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#f4ecec')
+        fig = px.histogram(datos_sim, nbins=30, title="Distribución de Duración (Días)", labels={'value': 'Días'}, color_discrete_sequence=[graph_bar])
+        fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color=graph_text)
         st.plotly_chart(fig, use_container_width=True)
         
         p85 = np.percentile(datos_sim, 85)
@@ -657,7 +716,7 @@ with tab4:
         st.error("Asegúrate de que: Optimista ≤ Más Probable ≤ Pesimista.")
 
 # ------------------------------------------
-# TAB 5: FLUJOS (CORREGIDO)
+# TAB 5: FLUJOS
 # ------------------------------------------
 with tab5:
     st.markdown("### Diagramas de Flujo y Secuencia")
@@ -747,7 +806,7 @@ with tab6:
             fig_donut.update_layout(
                 paper_bgcolor='rgba(0,0,0,0)', 
                 plot_bgcolor='rgba(0,0,0,0)', 
-                font_color='#f4ecec',
+                font_color=graph_text,
                 margin=dict(l=10, r=10, t=30, b=10)
             )
             st.plotly_chart(fig_donut, use_container_width=True)
@@ -883,7 +942,7 @@ with tab7:
                 mode="markers+text",
                 text=df_r["Riesgo"],
                 textposition="top center",
-                textfont=dict(color="#f4ecec", size=11),
+                textfont=dict(color=graph_text, size=11),
                 marker=dict(
                     size=16,
                     color=df_r["Severidad"],
@@ -894,11 +953,11 @@ with tab7:
             ))
 
         fig_matrix.update_layout(
-            xaxis=dict(title="Probabilidad (1-5)", range=[0.5, 5.5], dtick=1, gridcolor="#442026", zeroline=False),
-            yaxis=dict(title="Impacto (1-5)", range=[0.5, 5.5], dtick=1, gridcolor="#442026", zeroline=False),
+            xaxis=dict(title="Probabilidad (1-5)", range=[0.5, 5.5], dtick=1, gridcolor=grid_color, zeroline=False),
+            yaxis=dict(title="Impacto (1-5)", range=[0.5, 5.5], dtick=1, gridcolor=grid_color, zeroline=False),
             paper_bgcolor='rgba(0,0,0,0)',
             plot_bgcolor='rgba(0,0,0,0)',
-            font_color='#f4ecec',
+            font_color=graph_text,
             margin=dict(l=30, r=20, t=10, b=30),
             height=380
         )
