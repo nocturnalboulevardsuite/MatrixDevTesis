@@ -24,14 +24,14 @@ st.markdown("""
     <style>
     /* Fondo principal y color de texto */
     .stApp {
-        background-color: #2c0f14; /* Vino muy oscuro y mate */
-        color: #f4ecec; /* Texto gris muy claro / off-white */
+        background-color: #2c0f14;
+        color: #f4ecec;
         font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     }
     
     /* Encabezados épicos */
     h1, h2, h3 {
-        color: #e09f9f !important; /* Rojo vino pastel para destacar */
+        color: #e09f9f !important;
         font-weight: 300 !important;
         text-align: center;
     }
@@ -51,7 +51,7 @@ st.markdown("""
         box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
     }
 
-    /* Ocultar elementos innecesarios para más minimalismo */
+    /* Ocultar elementos innecesarios */
     header {visibility: hidden;}
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
@@ -61,7 +61,6 @@ st.markdown("""
 # ==========================================
 # INICIALIZACIÓN DE VARIABLES DE ESTADO
 # ==========================================
-# Se inicializan los DataFrames asegurando que el tipo de dato sea explícitamente string
 if "nombre_proj" not in st.session_state:
     st.session_state.nombre_proj = "MatrixDev Core"
 if "integrantes" not in st.session_state:
@@ -74,8 +73,35 @@ if "df_rnf" not in st.session_state:
     st.session_state.df_rnf = pd.DataFrame({"Descripción": ["Latencia < 200ms.", "Cifrado AES-256 en base de datos."]}, dtype=str)
 if "kanban_tasks" not in st.session_state:
     st.session_state.kanban_tasks = pd.DataFrame({"Tarea": ["Modelo BD"], "Estado": ["Completado"]}, dtype=str)
-if "df_mc_tasks" not in st.session_state:
-    st.session_state.df_mc_tasks = pd.DataFrame([{"Tarea": "Dev Backend", "Optimista": 5, "Mas_Probable": 10, "Pesimista": 20}])
+
+# Variables auxiliares para los campos de texto
+if "input_nuevo_rf" not in st.session_state:
+    st.session_state.input_nuevo_rf = ""
+if "input_nuevo_rnf" not in st.session_state:
+    st.session_state.input_nuevo_rnf = ""
+if "input_nueva_tarea" not in st.session_state:
+    st.session_state.input_nueva_tarea = ""
+
+# ==========================================
+# FUNCIONES CALLBACK (Añadir sin errores)
+# ==========================================
+def agregar_rf():
+    if st.session_state.input_nuevo_rf.strip():
+        nuevo_df = pd.DataFrame({"Descripción": [st.session_state.input_nuevo_rf.strip()]})
+        st.session_state.df_rf = pd.concat([st.session_state.df_rf, nuevo_df], ignore_index=True)
+        st.session_state.input_nuevo_rf = "" # Limpia la barra al añadir
+
+def agregar_rnf():
+    if st.session_state.input_nuevo_rnf.strip():
+        nuevo_df = pd.DataFrame({"Descripción": [st.session_state.input_nuevo_rnf.strip()]})
+        st.session_state.df_rnf = pd.concat([st.session_state.df_rnf, nuevo_df], ignore_index=True)
+        st.session_state.input_nuevo_rnf = ""
+
+def agregar_tarea():
+    if st.session_state.input_nueva_tarea.strip():
+        nuevo_df = pd.DataFrame({"Tarea": [st.session_state.input_nueva_tarea.strip()], "Estado": ["Pendiente"]})
+        st.session_state.kanban_tasks = pd.concat([st.session_state.kanban_tasks, nuevo_df], ignore_index=True)
+        st.session_state.input_nueva_tarea = ""
 
 # ==========================================
 # FUNCIONES DE GENERACIÓN DE DOCUMENTOS
@@ -86,7 +112,6 @@ def generar_word_ers():
     doc.add_paragraph(f"Objetivo: {st.session_state.objetivo_text}")
     
     doc.add_heading("Requisitos Funcionales", level=2)
-    # Filtrar vacíos antes de exportar
     df_rf_clean = st.session_state.df_rf.dropna(subset=["Descripción"])
     for i, row in df_rf_clean.iterrows():
         if str(row['Descripción']).strip() != "":
@@ -129,7 +154,6 @@ st.title("✦ MatrixDev ✦")
 st.markdown("<p style='text-align: center; color: #a68a8d;'>Gestión y Arquitectura de Proyectos</p>", unsafe_allow_html=True)
 st.write("---")
 
-# Uso de Tabs limpias y centradas
 tab1, tab2, tab3, tab_full = st.tabs([
     "1. Requisitos", 
     "2. Modelado", 
@@ -144,27 +168,39 @@ with tab1:
     st.session_state.objetivo_text = st.text_area("Objetivo Principal", st.session_state.objetivo_text, height=80)
     
     st.markdown("### Requisitos Funcionales")
-    st.info("💡 **Tip:** Para añadir un requisito, escribe en la última fila gris y presiona **Enter** en tu teclado.")
+    
+    # Nuevo formulario robusto para añadir RF
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        st.text_input("Nuevo RF", key="input_nuevo_rf", label_visibility="collapsed", placeholder="Escribe un requisito y presiona Enter...", on_change=agregar_rf)
+    with col2:
+        st.button("➕ Añadir", key="btn_rf", on_click=agregar_rf, use_container_width=True)
+
+    # La tabla ahora se usa principalmente para visualizar, editar datos existentes o borrar
     st.session_state.df_rf = st.data_editor(
         st.session_state.df_rf, 
         num_rows="dynamic", 
         use_container_width=True,
-        hide_index=True, # Ocultar índice para interfaz más limpia
-        column_config={
-            "Descripción": st.column_config.TextColumn("Descripción", default="", required=True)
-        },
+        hide_index=True,
+        column_config={"Descripción": st.column_config.TextColumn("Descripción", required=True)},
         key="editor_rf"
     )
     
     st.markdown("### Requisitos No Funcionales")
+    
+    # Nuevo formulario robusto para añadir RNF
+    col3, col4 = st.columns([4, 1])
+    with col3:
+        st.text_input("Nuevo RNF", key="input_nuevo_rnf", label_visibility="collapsed", placeholder="Escribe un requisito no funcional y presiona Enter...", on_change=agregar_rnf)
+    with col4:
+        st.button("➕ Añadir", key="btn_rnf", on_click=agregar_rnf, use_container_width=True)
+
     st.session_state.df_rnf = st.data_editor(
         st.session_state.df_rnf, 
         num_rows="dynamic", 
         use_container_width=True,
         hide_index=True,
-        column_config={
-            "Descripción": st.column_config.TextColumn("Descripción", default="", required=True)
-        },
+        column_config={"Descripción": st.column_config.TextColumn("Descripción", required=True)},
         key="editor_rnf"
     )
 
@@ -178,15 +214,24 @@ with tab2:
 # --- TAB 3: GESTIÓN ---
 with tab3:
     st.markdown("### Tablero Kanban")
+    
+    # Nuevo formulario robusto para añadir Tareas
+    col5, col6 = st.columns([4, 1])
+    with col5:
+        st.text_input("Nueva Tarea", key="input_nueva_tarea", label_visibility="collapsed", placeholder="Escribe una nueva tarea y presiona Enter...", on_change=agregar_tarea)
+    with col6:
+        st.button("➕ Añadir", key="btn_tarea", on_click=agregar_tarea, use_container_width=True)
+
     st.session_state.kanban_tasks = st.data_editor(
         st.session_state.kanban_tasks, 
         num_rows="dynamic", 
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Tarea": st.column_config.TextColumn("Tarea", default=""),
+            "Tarea": st.column_config.TextColumn("Tarea", required=True),
             "Estado": st.column_config.SelectboxColumn("Estado", options=["Pendiente", "En Proceso", "Completado"], required=True)
-        }
+        },
+        key="editor_kanban"
     )
 
 # --- TAB 4: REPORTE FULL (DESCARGA DE TODO) ---
@@ -208,7 +253,7 @@ with tab_full:
         kanban_csv = st.session_state.kanban_tasks.to_csv(index=False).encode('utf-8')
         zip_file.writestr(f"Kanban_Tareas.csv", kanban_csv)
 
-    st.write("") # Espaciador
+    st.write("") 
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.download_button(
