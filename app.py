@@ -223,6 +223,16 @@ def generar_mermaid_edt(edt_items, nombre_proyecto):
 
     return "\n".join(lines)
 
+def clasificar_riesgo(sev):
+    if sev <= 5:
+        return "Bajo 🟢"
+    elif sev <= 10:
+        return "Medio 🟡"
+    elif sev <= 15:
+        return "Alto 🟠"
+    else:
+        return "Crítico 🔴"
+
 # ==========================================
 # 3. FUNCIONES DE GENERACIÓN DE DOCUMENTOS
 # ==========================================
@@ -619,35 +629,147 @@ with tab6:
             st.rerun()
 
 # ------------------------------------------
-# TAB 7: RIESGOS
+# TAB 7: RIESGOS (MINIMALISTA Y UTILIZABLE)
 # ------------------------------------------
 with tab7:
-    st.markdown("### Matriz de Riesgos (Impacto vs Probabilidad)")
-    
+    st.markdown("### Matriz de Riesgos (5x5 Minimalista)")
+
     df_r = pd.DataFrame(st.session_state.riesgos_list)
+    
     if not df_r.empty:
         df_r["Severidad"] = df_r["Probabilidad"] * df_r["Impacto"]
+        df_r["Nivel"] = df_r["Severidad"].apply(clasificar_riesgo)
+    else:
+        df_r = pd.DataFrame(columns=["Riesgo", "Probabilidad", "Impacto", "Severidad", "Nivel"])
+
+    # MÉTRICAS RÁPIDAS
+    r_total = len(df_r)
+    r_criticos = len(df_r[df_r["Severidad"] >= 12]) if not df_r.empty else 0
+    r_prom = df_r["Severidad"].mean() if not df_r.empty else 0.0
+
+    mr1, mr2, mr3 = st.columns(3)
+    mr1.metric("⚠️ Total de Riesgos", r_total)
+    mr2.metric("🔥 Riesgos Altos / Críticos", r_criticos)
+    mr3.metric("📊 Severidad Promedio", f"{r_prom:.1f} / 25")
+
+    st.write("---")
+
+    col_matriz, col_form = st.columns([1.3, 1])
+
+    with col_matriz:
+        st.markdown("#### 🗺️ Mapa de Calor (Probabilidad vs Impacto)")
         
-        fig_r = px.scatter(
-            df_r, 
-            x="Probabilidad", 
-            y="Impacto", 
-            text="Riesgo", 
-            size="Severidad",
-            color="Severidad",
-            color_continuous_scale="Reds",
-            title="Mapa de Calor de Riesgos"
+        # Construir matriz de fondo 5x5
+        z_grid = [[i * j for j in range(1, 6)] for i in range(1, 6)]
+
+        fig_matrix = go.Figure()
+
+        # Fondo codificado por nivel de riesgo
+        fig_matrix.add_trace(go.Heatmap(
+            z=z_grid,
+            x=[1, 2, 3, 4, 5],
+            y=[1, 2, 3, 4, 5],
+            colorscale=[
+                [0.0, "rgba(46, 125, 50, 0.35)"],   # Verde (Bajo)
+                [0.35, "rgba(251, 192, 45, 0.35)"], # Amarillo (Medio)
+                [0.6, "rgba(245, 124, 0, 0.35)"],   # Naranja (Alto)
+                [1.0, "rgba(211, 47, 47, 0.4)"]     # Rojo (Crítico)
+            ],
+            showscale=False,
+            hoverinfo="skip"
+        ))
+
+        # Puntos de riesgo
+        if not df_r.empty:
+            fig_matrix.add_trace(go.Scatter(
+                x=df_r["Probabilidad"],
+                y=df_r["Impacto"],
+                mode="markers+text",
+                text=df_r["Riesgo"],
+                textposition="top center",
+                textfont=dict(color="#f4ecec", size=11),
+                marker=dict(
+                    size=16,
+                    color=df_r["Severidad"],
+                    colorscale="Reds",
+                    line=dict(width=1.5, color="#ffffff")
+                ),
+                hovertemplate="<b>%{text}</b><br>Probabilidad: %{x}<br>Impacto: %{y}<br>Severidad: %{marker.color}<extra></extra>"
+            ))
+
+        fig_matrix.update_layout(
+            xaxis=dict(title="Probabilidad (1-5)", range=[0.5, 5.5], dtick=1, gridcolor="#442026", zeroline=False),
+            yaxis=dict(title="Impacto (1-5)", range=[0.5, 5.5], dtick=1, gridcolor="#442026", zeroline=False),
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font_color='#f4ecec',
+            margin=dict(l=30, r=20, t=10, b=30),
+            height=380
         )
-        fig_r.update_layout(
-            xaxis=dict(range=[0, 6]), 
-            yaxis=dict(range=[0, 6]),
-            paper_bgcolor='rgba(0,0,0,0)', 
-            plot_bgcolor='rgba(0,0,0,0)', 
-            font_color='#f4ecec'
-        )
-        st.plotly_chart(fig_r, use_container_width=True)
+
+        st.plotly_chart(fig_matrix, use_container_width=True)
+
+    with col_form:
+        st.markdown("#### ➕ Registrar Nuevo Riesgo")
+        with st.form("form_add_riesgo", clear_on_submit=True):
+            r_nombre = st.text_input("Nombre / Descripción del Riesgo", placeholder="Ej: Retraso en entregables")
+            
+            c_p, c_i = st.columns(2)
+            r_prob = c_p.slider("Probabilidad (1 a 5)", min_value=1, max_value=5, value=3)
+            r_imp = c_i.slider("Impacto (1 a 5)", min_value=1, max_value=5, value=3)
+
+            btn_add_r = st.form_submit_button("Agregar Riesgo", use_container_width=True)
+            if btn_add_r:
+                if r_nombre.strip():
+                    st.session_state.riesgos_list.append({
+                        "Riesgo": r_nombre.strip(),
+                        "Probabilidad": int(r_prob),
+                        "Impacto": int(r_imp)
+                    })
+                    st.rerun()
+                else:
+                    st.error("Escribe un nombre para el riesgo.")
+
+    st.write("---")
+    st.markdown("#### 📝 Inventario y Edición de Riesgos")
+
+    if not st.session_state.riesgos_list:
+        st.info("No hay riesgos registrados.")
+    else:
+        r_del_idx = None
         
-    st.dataframe(df_r, use_container_width=True)
+        # Cabecera
+        rh1, rh2, rh3, rh4, rh5, rh6 = st.columns([3, 1.2, 1.2, 1.2, 1.5, 0.6])
+        rh1.markdown("**Riesgo**")
+        rh2.markdown("**Probabilidad**")
+        rh3.markdown("**Impacto**")
+        rh4.markdown("**Severidad**")
+        rh5.markdown("**Nivel**")
+        rh6.markdown("")
+
+        for idx, item in enumerate(st.session_state.riesgos_list):
+            rc1, rc2, rc3, rc4, rc5, rc6 = st.columns([3, 1.2, 1.2, 1.2, 1.5, 0.6])
+            
+            r_txt = rc1.text_input(f"rt_{idx}", value=item["Riesgo"], key=f"r_name_{idx}", label_visibility="collapsed")
+            r_p_val = rc2.number_input(f"rp_{idx}", value=int(item["Probabilidad"]), min_value=1, max_value=5, key=f"r_p_{idx}", label_visibility="collapsed")
+            r_i_val = rc3.number_input(f"ri_{idx}", value=int(item["Impacto"]), min_value=1, max_value=5, key=f"r_i_{idx}", label_visibility="collapsed")
+            
+            sev_val = r_p_val * r_i_val
+            nivel_str = clasificar_riesgo(sev_val)
+            
+            rc4.markdown(f"**{sev_val}**")
+            rc5.markdown(nivel_str)
+
+            st.session_state.riesgos_list[idx]["Riesgo"] = r_txt
+            st.session_state.riesgos_list[idx]["Probabilidad"] = r_p_val
+            st.session_state.riesgos_list[idx]["Impacto"] = r_i_val
+
+            if rc6.button("🗑️", key=f"del_r_{idx}"):
+                r_del_idx = idx
+
+        if r_del_idx is not None:
+            st.session_state.riesgos_list.pop(r_del_idx)
+            st.rerun()
 
 # ------------------------------------------
 # TAB 8: REPORTE FULL
