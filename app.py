@@ -153,7 +153,7 @@ with tab1:
         with col_in:
             nuevo_rf_val = st.text_input("Nuevo RF", placeholder="Escribe un requisito y presiona Enter o Añadir...", label_visibility="collapsed")
         with col_btn:
-            btn_add_rf = st.form_submit_button("➕ Añadir", use_container_width=True)
+            btn_add_rf = st.form_submit_button(" Añadir", use_container_width=True)
             
         if btn_add_rf and nuevo_rf_val.strip():
             st.session_state.rf_list.append(nuevo_rf_val.strip())
@@ -186,7 +186,7 @@ with tab1:
         with col_in_rnf:
             nuevo_rnf_val = st.text_input("Nuevo RNF", placeholder="Escribe un requisito no funcional y presiona Enter o Añadir...", label_visibility="collapsed")
         with col_btn_rnf:
-            btn_add_rnf = st.form_submit_button("➕ Añadir", use_container_width=True)
+            btn_add_rnf = st.form_submit_button(" Añadir", use_container_width=True)
             
         if btn_add_rnf and nuevo_rnf_val.strip():
             st.session_state.rnf_list.append(nuevo_rnf_val.strip())
