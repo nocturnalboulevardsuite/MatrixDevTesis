@@ -107,13 +107,44 @@ if "kanban_tasks" not in st.session_state:
         {"Tarea": "Modelo BD", "Estado": "Completado"},
         {"Tarea": "Endpoints API", "Estado": "En Proceso"}
     ]
+
+# Estructura jerárquica multinivel para la EDT
 if "edt_list" not in st.session_state:
     st.session_state.edt_list = [
-        {"Fase": "1. Inicio", "Paquete": "Levantamiento de Requisitos", "Horas": 20},
-        {"Fase": "2. Desarrollo", "Paquete": "Backend & Base de Datos", "Horas": 60},
-        {"Fase": "2. Desarrollo", "Paquete": "Frontend UI", "Horas": 40},
-        {"Fase": "3. Cierre", "Paquete": "Despliegue y Pruebas", "Horas": 15}
+        {
+            "Fase": "Fase 1: Preparación",
+            "Subfase": "Limpieza y Despeje",
+            "Paquete": "Despejar Habitación y Muebles",
+            "Horas": 5,
+            "Costo": 20000,
+            "Documentos": "Plan de Trabajo"
+        },
+        {
+            "Fase": "Fase 1: Preparación",
+            "Subfase": "Pintura Aerosol",
+            "Paquete": "Pintar Arbusto / Detalles",
+            "Horas": 4,
+            "Costo": 35000,
+            "Documentos": "Ficha Técnica Aerosol"
+        },
+        {
+            "Fase": "Fase 2: Aplicación Manual",
+            "Subfase": "Capas de Pintura",
+            "Paquete": "Mano de Pintura Muros (1 y 2)",
+            "Horas": 16,
+            "Costo": 80000,
+            "Documentos": "Guía de Pintado Manual"
+        },
+        {
+            "Fase": "Fase 2: Aplicación Manual",
+            "Subfase": "Documentación y Entrega",
+            "Paquete": "Informe de Inspección y Cotizaciones",
+            "Horas": 6,
+            "Costo": 15000,
+            "Documentos": "Cotización + Certificados"
+        }
     ]
+
 if "riesgos_list" not in st.session_state:
     st.session_state.riesgos_list = [
         {"Riesgo": "Retraso en entrega API", "Probabilidad": 3, "Impacto": 4},
@@ -130,27 +161,66 @@ def cambiar_plantilla_flujo():
         st.session_state.flujo_codigo = PLANTILLAS_FLUJO[sel]
 
 def generar_mermaid_edt(edt_items, nombre_proyecto):
-    proj_name = nombre_proyecto.replace('"', '').replace("'", "")
+    proj_name = str(nombre_proyecto).replace('"', '').replace("'", "")
     lines = ["graph TD", f'    ROOT["📦 {proj_name}"]']
     
     fases = {}
     for item in edt_items:
-        fase = str(item.get("Fase", "Sin Fase")).replace('"', '')
-        paquete = str(item.get("Paquete", "Tarea")).replace('"', '')
-        horas = item.get("Horas", 0)
-        if fase not in fases:
-            fases[fase] = []
-        fases[fase].append((paquete, horas))
-    
-    for idx_f, (fase_name, pkgs) in enumerate(fases.items()):
-        fase_id = f"F{idx_f}"
-        total_fase_hrs = sum(h for _, h in pkgs)
-        lines.append(f'    ROOT --> {fase_id}["📂 {fase_name}<br/><i>Total: {total_fase_hrs} hrs</i>"]')
+        fase = str(item.get("Fase", "Sin Fase")).strip().replace('"', '')
+        subfase = str(item.get("Subfase", "")).strip().replace('"', '')
+        paquete = str(item.get("Paquete", "Tarea")).strip().replace('"', '')
+        horas = float(item.get("Horas", 0))
+        costo = float(item.get("Costo", 0))
+        doc = str(item.get("Documentos", "")).strip().replace('"', '')
         
-        for idx_p, (pkg_name, hrs) in enumerate(pkgs):
-            pkg_id = f"P{idx_f}_{idx_p}"
-            lines.append(f'    {fase_id} --> {pkg_id}["📄 {pkg_name}<br/>⏱️ {hrs} hrs"]')
+        if fase not in fases:
+            fases[fase] = {}
+        if subfase not in fases[fase]:
+            fases[fase][subfase] = []
+        
+        fases[fase][subfase].append({
+            "paquete": paquete,
+            "horas": horas,
+            "costo": costo,
+            "doc": doc
+        })
+
+    fase_idx = 0
+    for fase_name, subfases in fases.items():
+        fase_id = f"F{fase_idx}"
+        
+        total_fase_hrs = sum(pkg["horas"] for sub in subfases.values() for pkg in sub)
+        total_fase_cost = sum(pkg["costo"] for sub in subfases.values() for pkg in sub)
+        
+        fase_label = f"📂 {fase_name}<br/><i>Total: {total_fase_hrs:.0f}h | ${total_fase_cost:,.0f}</i>"
+        lines.append(f'    ROOT --> {fase_id}["{fase_label}"]')
+        
+        sub_idx = 0
+        for sub_name, pkgs in subfases.items():
+            if sub_name:
+                sub_id = f"{fase_id}_S{sub_idx}"
+                sub_hrs = sum(pkg["horas"] for pkg in pkgs)
+                sub_cost = sum(pkg["costo"] for pkg in pkgs)
+                sub_label = f"📁 {sub_name}<br/><i>{sub_hrs:.0f}h | ${sub_cost:,.0f}</i>"
+                lines.append(f'    {fase_id} --> {sub_id}["{sub_label}"]')
+                parent_id = sub_id
+            else:
+                parent_id = fase_id
             
+            for pkg_idx, pkg in enumerate(pkgs):
+                pkg_id = f"{parent_id}_P{pkg_idx}"
+                details = [f"⏱️ {pkg['horas']:.0f} hrs"]
+                if pkg['costo'] > 0:
+                    details.append(f"💰 ${pkg['costo']:,.0f}")
+                if pkg['doc']:
+                    details.append(f"📄 {pkg['doc']}")
+                
+                details_str = "<br/>".join(details)
+                lines.append(f'    {parent_id} --> {pkg_id}["<b>{pkg["paquete"]}</b><br/>{details_str}"]')
+            
+            sub_idx += 1
+        fase_idx += 1
+
     return "\n".join(lines)
 
 # ==========================================
@@ -196,11 +266,18 @@ def generar_excel_estilizado():
     for k in st.session_state.kanban_tasks:
         ws2.append([k["Tarea"], k["Estado"]])
 
-    # Hoja 3: EDT
+    # Hoja 3: EDT (WBS Ampliada)
     ws3 = wb.create_sheet(title="EDT (WBS)")
-    ws3.append(["Fase", "Paquete de Trabajo", "Horas Estimadas"])
+    ws3.append(["Fase Principal", "Subfase / Grupo", "Paquete de Trabajo", "Horas Estimadas", "Costo Estimado", "Documentos / Adjuntos"])
     for e in st.session_state.edt_list:
-        ws3.append([e["Fase"], e["Paquete"], e["Horas"]])
+        ws3.append([
+            e.get("Fase", ""),
+            e.get("Subfase", ""),
+            e.get("Paquete", ""),
+            e.get("Horas", 0),
+            e.get("Costo", 0),
+            e.get("Documentos", "")
+        ])
 
     wb.save(output)
     return output.getvalue()
@@ -398,58 +475,44 @@ with tab5:
     st_mermaid(st.session_state.flujo_codigo)
 
 # ------------------------------------------
-# TAB 6: EDT (WBS) - REVISIÓN MEJORADA
+# TAB 6: EDT (WBS) - MULTINIVEL & MINIMALISTA
 # ------------------------------------------
 with tab6:
     st.markdown("### Estructura de Desglose de Trabajo (EDT / WBS)")
     
-    # TUTORIAL Y GUÍA DE USO SUPERIOR
-    with st.expander("📖 **Manual & Guía Rápida: ¿Cómo funciona y cómo usar la EDT?**", expanded=True):
+    with st.expander("📖 **Guía Rápida EDT: Fases, Agrupaciones y Documentos**", expanded=False):
         st.markdown(f"""
-        **¿Qué es una EDT (Estructura de Desglose de Trabajo / WBS)?**  
-        Es la representación jerárquica de todo el trabajo necesario para completar el proyecto. Divide un proyecto complejo en partes pequeñas y manejables para estimar tiempos, costos y responsabilidades sin perder la visión general.
-
-        ---
-        #### 💡 Guía de Uso Paso a Paso:
-        1. **Estructura Jerárquica por Niveles:**
-           * 📦 **Proyecto (Nivel 0 - Raíz):** Representa el entregable total del sistema (*{st.session_state.nombre_proj}*).
-           * 📂 **Fase (Nivel 1):** Etapas principales del ciclo de vida del proyecto (ej: *1. Inicio*, *2. Desarrollo*, *3. Cierre*).
-           * 📄 **Paquete de Trabajo (Nivel 2):** Unidades de trabajo específicas con su tiempo estimado en horas.
-
-        2. **Cómo Añadir nuevos Paquetes de Trabajo:**
-           * Utiliza el formulario **"➕ Agregar Paquete de Trabajo"** para ingresar la Fase, el Nombre del Paquete y la Estimación en Horas.
-           * Presiona **Añadir Paquete** para actualizar automáticamente el árbol jerárquico y los indicadores.
-
-        3. **Cómo Modificar o Eliminar:**
-           * Modifica directamente los datos en la sección **"📝 Lista y Edición Dinámica de la EDT"**.
-           * Haz clic en el botón 🗑️ para remover un paquete que ya no necesites.
-
-        4. **Interpretación de Gráficos:**
-           * **Árbol Jerárquico:** Muestra visualmente las relaciones padre-hijo del proyecto con el conteo de horas sumado por fase.
-           * **Gráfico de Donut:** Indica qué porcentaje de la carga horaria total absorbe cada fase del proyecto.
+        **Estructura Jerárquica del Proyecto:**
+        * 📦 **Proyecto (Nivel 0):** *{st.session_state.nombre_proj}*
+        * 📂 **Fase Principal (Nivel 1):** Ej: *Fase 1: Preparación*, *Fase 2: Manual*.
+        * 📁 **Subfase / Grupo (Nivel 2):** Agrupación secundaria opcional (Ej: *Aerosol*, *Documentación*).
+        * 📄 **Paquete de Trabajo (Nivel 3):** Tarea entregable con **Horas**, **Costo** y **Documentos**.
         """)
 
     df_edt = pd.DataFrame(st.session_state.edt_list)
     
-    # METRICAS DE RESUMEN
+    # MÉTRICAS GLOBALES
     if not df_edt.empty:
         total_horas = df_edt["Horas"].sum()
+        total_costo = df_edt["Costo"].sum() if "Costo" in df_edt.columns else 0
         total_paquetes = len(df_edt)
         total_fases = df_edt["Fase"].nunique()
     else:
         total_horas = 0
+        total_costo = 0
         total_paquetes = 0
         total_fases = 0
 
-    m1, m2, m3 = st.columns(3)
-    m1.metric("⏳ Total Horas Estimadas", f"{total_horas} hrs")
-    m2.metric("📄 Total Paquetes de Trabajo", total_paquetes)
-    m3.metric("📂 Fases Definidas", total_fases)
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("⏳ Total Horas", f"{total_horas:.0f} hrs")
+    m2.metric("💰 Costo Total Estimado", f"${total_costo:,.0f}")
+    m3.metric("📄 Paquetes de Trabajo", total_paquetes)
+    m4.metric("📂 Fases Principales", total_fases)
     
     st.write("---")
     
     # DIAGRAMA DE ÁRBOL JERÁRQUICO (WBS VISUAL EN MERMAID)
-    st.markdown("#### 🌳 Diagrama de Árbol Jerárquico (WBS Visual)")
+    st.markdown("#### 🌳 Diagrama Jerárquico Multinivel (EDT)")
     if not df_edt.empty:
         mermaid_edt_code = generar_mermaid_edt(st.session_state.edt_list, st.session_state.nombre_proj)
         st_mermaid(mermaid_edt_code)
@@ -458,17 +521,20 @@ with tab6:
 
     st.write("---")
 
-    # DISTRIBUCIÓN Y FORMULARIO DE CREACIÓN
-    col_graph, col_manage = st.columns([1, 1])
+    # DISTRIBUCIÓN DE HORAS Y COSTOS Y FORMULARIO
+    col_graph, col_manage = st.columns([1.1, 1])
 
     with col_graph:
-        st.markdown("#### 📊 Distribución del Esfuerzo por Fase")
-        if not df_edt.empty:
-            df_fases = df_edt.groupby("Fase", as_index=False)["Horas"].sum()
+        st.markdown("#### 📊 Distribución de Recursos por Fase")
+        if not df_edt.empty and "Costo" in df_edt.columns:
+            df_fases = df_edt.groupby("Fase", as_index=False)[["Horas", "Costo"]].sum()
+            
+            tipo_metric = st.radio("Métrica visualizada", ["Horas", "Costo"], horizontal=True, key="rad_edt_metric")
+            
             fig_donut = px.pie(
                 df_fases, 
                 names='Fase', 
-                values='Horas', 
+                values=tipo_metric, 
                 hole=0.4,
                 color_discrete_sequence=px.colors.qualitative.Dark24
             )
@@ -483,41 +549,67 @@ with tab6:
             st.info("Agrega datos para generar el gráfico de distribución.")
 
     with col_manage:
-        st.markdown("#### ➕ Agregar Paquete de Trabajo")
-        with st.form("form_add_edt", clear_on_submit=True):
-            fase_in = st.text_input("Fase del Proyecto", placeholder="Ej: 2. Desarrollo")
-            paquete_in = st.text_input("Paquete de Trabajo", placeholder="Ej: Módulo de Reportes")
-            horas_in = st.number_input("Horas Estimadas", min_value=1, value=10, step=1)
+        st.markdown("#### ➕ Agregar Paquete de Trabajo / Tarea")
+        with st.form("form_add_edt_multi", clear_on_submit=True):
+            fase_in = st.text_input("Fase Principal", placeholder="Ej: Fase 1: Preparación")
+            subfase_in = st.text_input("Subfase / Grupo (Opcional)", placeholder="Ej: Pintura Aerosol")
+            paquete_in = st.text_input("Paquete de Trabajo / Tarea", placeholder="Ej: Pintar arbusto")
             
-            btn_add_edt = st.form_submit_button("Añadir Paquete", use_container_width=True)
+            c_h, c_c = st.columns(2)
+            horas_in = c_h.number_input("Horas Estimadas", min_value=0, value=4, step=1)
+            costo_in = c_c.number_input("Costo Estimado ($)", min_value=0, value=15000, step=1000)
+            
+            doc_in = st.text_input("Documentos / Referencias", placeholder="Ej: Ficha Técnica Aerosol")
+            
+            btn_add_edt = st.form_submit_button("Añadir Paquete a EDT", use_container_width=True)
             if btn_add_edt:
                 if fase_in.strip() and paquete_in.strip():
                     st.session_state.edt_list.append({
                         "Fase": fase_in.strip(),
+                        "Subfase": subfase_in.strip(),
                         "Paquete": paquete_in.strip(),
-                        "Horas": int(horas_in)
+                        "Horas": float(horas_in),
+                        "Costo": float(costo_in),
+                        "Documentos": doc_in.strip()
                     })
                     st.rerun()
                 else:
-                    st.error("Por favor completa los campos de Fase y Paquete.")
+                    st.error("Debes completar al menos la Fase Principal y el Paquete de Trabajo.")
 
     st.write("---")
-    st.markdown("#### 📝 Lista y Edición Dinámica de la EDT")
+    st.markdown("#### 📝 Lista Dinámica y Edición de EDT")
     
     if not st.session_state.edt_list:
         st.info("La estructura de desglose de trabajo está vacía.")
     else:
         edt_del_idx = None
+        
+        # Cabecera de la tabla editable
+        h1, h2, h3, h4, h5, h6, h7 = st.columns([2, 1.8, 2.2, 1, 1.2, 1.8, 0.6])
+        h1.markdown("**Fase**")
+        h2.markdown("**Subfase**")
+        h3.markdown("**Paquete / Tarea**")
+        h4.markdown("**Horas**")
+        h5.markdown("**Costo ($)**")
+        h6.markdown("**Documentos**")
+        h7.markdown("")
+        
         for i, item in enumerate(st.session_state.edt_list):
-            col_f, col_p, col_h, col_del = st.columns([2.5, 3.5, 1.5, 0.8])
+            col_f, col_sf, col_p, col_h, col_c, col_d, col_del = st.columns([2, 1.8, 2.2, 1, 1.2, 1.8, 0.6])
             
-            fase_val = col_f.text_input(f"Fase {i}", value=item["Fase"], key=f"edt_fase_{i}", label_visibility="collapsed")
-            pkg_val = col_p.text_input(f"Paquete {i}", value=item["Paquete"], key=f"edt_pkg_{i}", label_visibility="collapsed")
-            hrs_val = col_h.number_input(f"Horas {i}", value=int(item["Horas"]), min_value=1, step=1, key=f"edt_hrs_{i}", label_visibility="collapsed")
+            f_val = col_f.text_input(f"f_{i}", value=item.get("Fase", ""), key=f"edt_fase_{i}", label_visibility="collapsed")
+            sf_val = col_sf.text_input(f"sf_{i}", value=item.get("Subfase", ""), key=f"edt_sfase_{i}", label_visibility="collapsed")
+            p_val = col_p.text_input(f"p_{i}", value=item.get("Paquete", ""), key=f"edt_pkg_{i}", label_visibility="collapsed")
+            h_val = col_h.number_input(f"h_{i}", value=float(item.get("Horas", 0)), min_value=0.0, step=1.0, key=f"edt_hrs_{i}", label_visibility="collapsed")
+            c_val = col_c.number_input(f"c_{i}", value=float(item.get("Costo", 0)), min_value=0.0, step=1000.0, key=f"edt_cost_{i}", label_visibility="collapsed")
+            doc_val = col_d.text_input(f"d_{i}", value=item.get("Documentos", ""), key=f"edt_doc_{i}", label_visibility="collapsed")
             
-            st.session_state.edt_list[i]["Fase"] = fase_val
-            st.session_state.edt_list[i]["Paquete"] = pkg_val
-            st.session_state.edt_list[i]["Horas"] = int(hrs_val)
+            st.session_state.edt_list[i]["Fase"] = f_val
+            st.session_state.edt_list[i]["Subfase"] = sf_val
+            st.session_state.edt_list[i]["Paquete"] = p_val
+            st.session_state.edt_list[i]["Horas"] = h_val
+            st.session_state.edt_list[i]["Costo"] = c_val
+            st.session_state.edt_list[i]["Documentos"] = doc_val
             
             if col_del.button("🗑️", key=f"del_edt_{i}"):
                 edt_del_idx = i
