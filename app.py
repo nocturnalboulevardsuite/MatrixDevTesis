@@ -255,6 +255,195 @@ def generar_word_ers():
     doc.save(target_stream)
     return target_stream.getvalue()
 
+def generar_word_mementomori():
+    doc = Document()
+    
+    # Encabezado principal
+    p_main = doc.add_heading(level=0)
+    r_main = p_main.add_run(f"REPORTE MEMENTO MORI: {st.session_state.nombre_proj.upper()}")
+    r_main.font.bold = True
+    
+    doc.add_paragraph(f"Integrantes / Responsables: {st.session_state.integrantes}")
+    doc.add_paragraph("Análisis Crítico Integral de Requisitos, Arquitectura, Tiempos, EDT y Riesgos del Sistema.")
+    doc.add_paragraph("="*65)
+    
+    # 1. INTRODUCCIÓN Y OBJETIVOS
+    doc.add_heading("1. Introducción y Objetivos del Proyecto", level=1)
+    doc.add_paragraph(f"Objetivo Principal: {st.session_state.objetivo_text}")
+    
+    p1 = doc.add_paragraph()
+    p1.add_run("🔍 Análisis Crítico e Interpretación: ").bold = True
+    p1.add_run(
+        f"El objetivo planteado para el proyecto '{st.session_state.nombre_proj}' aborda la necesidad clave de automatización e integración. "
+        "Sin embargo, el punto crítico principal radica en controlar el alcance funcional inicial. "
+        "Bajo el análisis MementoMori, el principal riesgo de esta fase es la expansión descontrolada del alcance (Scope Creep), "
+        "la cual puede desalinear las expectativas de los interesados antes de consolidar el producto mínimo viable (MVP)."
+    )
+
+    # 2. REQUISITOS
+    doc.add_heading("2. Especificación de Requisitos (RF y RNF)", level=1)
+    doc.add_heading("Requisitos Funcionales (RF)", level=2)
+    for idx, rf in enumerate(st.session_state.rf_list, 1):
+        if rf.strip():
+            doc.add_paragraph(f"• RF-{idx:02d}: {rf.strip()}")
+            
+    doc.add_heading("Requisitos No Funcionales (RNF)", level=2)
+    for idx, rnf in enumerate(st.session_state.rnf_list, 1):
+        if rnf.strip():
+            doc.add_paragraph(f"• RNF-{idx:02d}: {rnf.strip()}")
+            
+    p2 = doc.add_paragraph()
+    p2.add_run("🔍 Análisis Crítico de Requisitos: ").bold = True
+    p2.add_run(
+        "Al evaluar la matriz de requisitos, los puntos críticos se concentran en los Requisitos No Funcionales (RNF). "
+        "Si bien los requisitos funcionales aseguran la operatividad del software, un fallo en el cumplimiento de los RNF "
+        "(como latencias elevadas o vulnerabilidades de seguridad) generará la falla total de adopción por parte de los usuarios finales, "
+        "imposibilitando la escalabilidad del sistema."
+    )
+
+    # 3. DIAGRAMAS Y ARQUITECTURA
+    doc.add_heading("3. Arquitectura y Diagramas de Flujo / Secuencia", level=1)
+    doc.add_paragraph("Sintaxis del Diagrama de Flujo / Secuencia Activo:")
+    doc.add_paragraph(st.session_state.flujo_codigo)
+    
+    p3 = doc.add_paragraph()
+    p3.add_run("🔍 Interpretación de Arquitectura y Puntos Críticos: ").bold = True
+    p3.add_run(
+        "Con estos diagramas de flujo y secuencia podemos entender la interacción de componentes y el recorrido de la información. "
+        "El punto crítico identificado es el acoplamiento directo entre el controlador y los servicios de base de datos o autenticación. "
+        "Si no se implementan políticas de reintento, caché o manejo de excepciones HTTP (ej. 401 Unauthorized o 500 Server Error), "
+        "cualquier caída puntual de la base de datos provocará un colapso en cadena en los endpoints expuestos al usuario."
+    )
+
+    # 4. GESTIÓN KANBAN
+    doc.add_heading("4. Estado de Gestión de Tareas (Tablero Kanban)", level=1)
+    if st.session_state.kanban_tasks:
+        tbl_k = doc.add_table(rows=1, cols=2)
+        tbl_k.rows[0].cells[0].text = "Tarea"
+        tbl_k.rows[0].cells[1].text = "Estado"
+        for t in st.session_state.kanban_tasks:
+            row = tbl_k.add_row().cells
+            row[0].text = t["Tarea"]
+            row[1].text = t["Estado"]
+    else:
+        doc.add_paragraph("No existen tareas registradas.")
+
+    p4 = doc.add_paragraph()
+    p4.add_run("🔍 Análisis Crítico del Flujo Kanban: ").bold = True
+    p4.add_run(
+        "El análisis del tablero de tareas revela que la acumulación de ítems en estado 'En Proceso' "
+        "representa la mayor amenaza para el ritmo de entrega (Work In Progress). Se sugiere definir un límite estricto de tareas simultáneas "
+        "para evitar la sobrecarga de trabajo y la sobreestimación del rendimiento del equipo."
+    )
+
+    # 5. EDT / WBS
+    doc.add_heading("5. Estructura de Desglose de Trabajo (EDT / WBS)", level=1)
+    if st.session_state.edt_list:
+        tbl_e = doc.add_table(rows=1, cols=5)
+        hdr_e = tbl_e.rows[0].cells
+        hdr_e[0].text = "Fase"
+        hdr_e[1].text = "Paquete de Trabajo"
+        hdr_e[2].text = "Horas"
+        hdr_e[3].text = "Costo ($)"
+        hdr_e[4].text = "Documentos"
+        
+        tot_hrs = 0
+        tot_cost = 0
+        for item in st.session_state.edt_list:
+            r = tbl_e.add_row().cells
+            r[0].text = str(item.get("Fase", ""))
+            r[1].text = str(item.get("Paquete", ""))
+            r[2].text = str(item.get("Horas", 0))
+            r[3].text = f"${item.get('Costo', 0):,.0f}"
+            r[4].text = str(item.get("Documentos", ""))
+            tot_hrs += item.get("Horas", 0)
+            tot_cost += item.get("Costo", 0)
+            
+        doc.add_paragraph(f"Métricas Totales Planificadas: {tot_hrs:.1f} Horas Totales | Presupuesto Total: ${tot_cost:,.0f}")
+    else:
+        doc.add_paragraph("No hay paquetes de EDT registrados.")
+
+    p5 = doc.add_paragraph()
+    p5.add_run("🔍 Puntos Críticos Presupuestarios y de Carga Horaria: ").bold = True
+    p5.add_run(
+        "Al examinar la EDT, se observa que las actividades con mayor asignación de costo y horas conforman la ruta crítica del proyecto. "
+        "Cualquier imprevisto de estimación en estas fases clave provocará desviaciones acumulativas, "
+        "agotando la reserva de contingencia financiera y extendiendo la fecha límite original."
+    )
+
+    # 6. MONTE CARLO
+    doc.add_heading("6. Análisis y Simulación Monte Carlo", level=1)
+    opt = st.session_state.get("mc_opt", 10)
+    prob = st.session_state.get("mc_prob", 20)
+    pes = st.session_state.get("mc_pes", 45)
+    sims = st.session_state.get("mc_sims", 2000)
+
+    if opt <= prob <= pes:
+        sim_data = np.random.triangular(left=opt, mode=prob, right=pes, size=sims)
+        p50 = np.percentile(sim_data, 50)
+        p85 = np.percentile(sim_data, 85)
+        p95 = np.percentile(sim_data, 95)
+
+        doc.add_paragraph(f"Parámetros Configurados: Optimista={opt} días | Más Probable={prob} días | Pesimista={pes} días (Muestras: {sims})")
+        doc.add_paragraph(f"• Percentil 50 (Mediana Esperada): {p50:.1f} Días")
+        doc.add_paragraph(f"• Percentil 85 (Recomendación de Compromiso): {p85:.1f} Días")
+        doc.add_paragraph(f"• Percentil 95 (Escenario de Alta Incertidumbre): {p95:.1f} Días")
+
+        p6 = doc.add_paragraph()
+        p6.add_run("🔍 Veredicto y Puntos Críticos de Monte Carlo: ").bold = True
+        p6.add_run(
+            f"Con esta simulación Monte Carlo podemos concluir que la entrega es factible a los {p85:.1f} días con un 85% de nivel de confianza. "
+            f"Sin embargo, existe un margen de incertidumbre del 15% asociado a la cola pesimista ({pes} días). "
+            f"Si se materializan complicaciones técnicas de manera simultánea, la probabilidad de sobrepasar la estimación central es considerable, "
+            "lo que generará retrasos en la entrega final salvo que se mantengan controles semanales de seguimiento."
+        )
+    else:
+        doc.add_paragraph("Los parámetros introducidos para la simulación Monte Carlo no son válidos (requiere Optimista ≤ Más Probable ≤ Pesimista).")
+
+    # 7. MATRIZ DE RIESGOS
+    doc.add_heading("7. Evaluación y Filosofía de Riesgos (MementoMori)", level=1)
+    if st.session_state.riesgos_list:
+        tbl_r = doc.add_table(rows=1, cols=5)
+        hdr_r = tbl_r.rows[0].cells
+        hdr_r[0].text = "Riesgo"
+        hdr_r[1].text = "Probabilidad"
+        hdr_r[2].text = "Impacto"
+        hdr_r[3].text = "Severidad"
+        hdr_r[4].text = "Nivel"
+
+        for r_item in st.session_state.riesgos_list:
+            r_row = tbl_r.add_row().cells
+            prob_v = r_item.get("Probabilidad", 1)
+            imp_v = r_item.get("Impacto", 1)
+            sev = prob_v * imp_v
+            r_row[0].text = str(r_item.get("Riesgo", ""))
+            r_row[1].text = str(prob_v)
+            r_row[2].text = str(imp_v)
+            r_row[3].text = str(sev)
+            r_row[4].text = clasificar_riesgo(sev)
+    else:
+        doc.add_paragraph("No hay riesgos registrados en la matriz.")
+
+    p7 = doc.add_paragraph()
+    p7.add_run("🔍 Estrategia de Mitigación MementoMori: ").bold = True
+    p7.add_run(
+        "Bajo el principio 'Memento Mori' (recordar la vulnerabilidad y planificar anticipadamente los fallos), "
+        "los riesgos con severidad alta y crítica deben contar con planes de contingencia documentados antes de iniciar el desarrollo. "
+        "Ignorar las señales de alerta tempranas en los componentes críticos provocará que problemas menores escalen a fallos sistémicos indeseados."
+    )
+
+    # 8. CONCLUSIONES
+    doc.add_heading("8. Conclusiones y Recomendaciones Finales", level=1)
+    doc.add_paragraph(
+        f"El proyecto '{st.session_state.nombre_proj}' cuenta con una base metodológica y técnica sólida. "
+        f"Se recomienda formalizar el compromiso de entrega considerando el percentil 85 de Monte Carlo ({p85:.1f} días) "
+        "y monitorear de forma continua los requisitos no funcionales y la matriz de riesgos para asegurar el éxito del proyecto."
+    )
+
+    target_stream = io.BytesIO()
+    doc.save(target_stream)
+    return target_stream.getvalue()
+
 def generar_excel_estilizado():
     output = io.BytesIO()
     wb = openpyxl.Workbook()
@@ -299,7 +488,7 @@ st.title("✦ MatrixDev ✦")
 st.markdown("<p style='text-align: center; color: #a68a8d;'>Gestión y Arquitectura de Proyectos</p>", unsafe_allow_html=True)
 st.write("---")
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab_full = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab_full = st.tabs([
     "1. Requisitos", 
     "2. Modelado", 
     "3. Gestión", 
@@ -307,6 +496,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab_full = st.tabs([
     "5. Flujos", 
     "6. EDT (WBS)", 
     "7. Riesgos", 
+    "8. Reporte MementoMori",
     "📦 Descarga Full"
 ])
 
@@ -315,7 +505,9 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab_full = st.tabs([
 # ------------------------------------------
 with tab1:
     st.markdown("### Definición del Sistema")
-    st.session_state.nombre_proj = st.text_input("Nombre del Proyecto", st.session_state.nombre_proj)
+    c_p1, c_p2 = st.columns(2)
+    st.session_state.nombre_proj = c_p1.text_input("Nombre del Proyecto", st.session_state.nombre_proj)
+    st.session_state.integrantes = c_p2.text_input("Integrantes / Equipo", st.session_state.integrantes)
     st.session_state.objetivo_text = st.text_area("Objetivo Principal", st.session_state.objetivo_text, height=80)
     
     st.write("---")
@@ -443,11 +635,11 @@ with tab3:
 with tab4:
     st.markdown("### Simulación Monte Carlo de Estimación")
     c1, c2, c3 = st.columns(3)
-    opt = c1.number_input("Días Optimista", value=10, min_value=1)
-    prob = c2.number_input("Días Más Probable", value=20, min_value=1)
-    pes = c3.number_input("Días Pesimista", value=45, min_value=1)
+    opt = c1.number_input("Días Optimista", value=10, min_value=1, key="mc_opt")
+    prob = c2.number_input("Días Más Probable", value=20, min_value=1, key="mc_prob")
+    pes = c3.number_input("Días Pesimista", value=45, min_value=1, key="mc_pes")
     
-    simulaciones = st.slider("Número de Simulaciones", 500, 10000, 2000, step=500)
+    simulaciones = st.slider("Número de Simulaciones", 500, 10000, 2000, step=500, key="mc_sims")
     
     if opt <= prob <= pes:
         datos_sim = np.random.triangular(left=opt, mode=prob, right=pes, size=simulaciones)
@@ -629,7 +821,7 @@ with tab6:
             st.rerun()
 
 # ------------------------------------------
-# TAB 7: RIESGOS (MINIMALISTA Y UTILIZABLE)
+# TAB 7: RIESGOS
 # ------------------------------------------
 with tab7:
     st.markdown("### Matriz de Riesgos (5x5 Minimalista)")
@@ -772,17 +964,59 @@ with tab7:
             st.rerun()
 
 # ------------------------------------------
-# TAB 8: REPORTE FULL
+# TAB 8: REPORTE MEMENTOMORI
+# ------------------------------------------
+with tab8:
+    st.markdown("### 📜 Reporte MementoMori (Análisis de Puntos Críticos)")
+    st.write(
+        "Este reporte genera un documento en formato Word (.docx) que consolida un análisis crítico y exhaustivo de todos los componentes "
+        "del proyecto: requisitos, diagramas de flujo/arquitectura, estimación Monte Carlo, EDT y matriz de riesgos."
+    )
+    
+    col_m1, col_m2 = st.columns(2)
+    with col_m1:
+        st.session_state.integrantes = st.text_input("Integrantes / Responsables", st.session_state.integrantes, key="mem_tab_integrantes")
+    with col_m2:
+        st.session_state.nombre_proj = st.text_input("Nombre del Proyecto", st.session_state.nombre_proj, key="mem_tab_nombre")
+
+    st.markdown("#### 🔍 Cobertura del Análisis MementoMori:")
+    st.markdown("""
+    * **1. Introducción y Alcance:** Evaluación de viabilidad, alineación estratégica y prevención de Scope Creep.
+    * **2. Requisitos (RF / RNF):** Análisis de vulnerabilidad en los Requisitos No Funcionales (latencia, seguridad).
+    * **3. Arquitectura y Flujos:** Interpretación del acoplamiento de componentes y puntos de fallo en la secuencia de usuario.
+    * **4. Gestión Kanban:** Identificación del trabajo en proceso (WIP) y cuellos de botella.
+    * **5. EDT (WBS):** Evaluación de actividades críticas con alto impacto en costo y horas.
+    * **6. Simulación Monte Carlo:** Diagnóstico de niveles de confianza (P85 / P95) y análisis de dispersión pesimista.
+    * **7. Matriz de Riesgos:** Filosofía MementoMori ('Planificar anticipadamente ante fallos') y mitigación activa.
+    """)
+
+    word_mementomori_bytes = generar_word_mementomori()
+
+    st.write("")
+    col_btn_center, _ = st.columns([2, 1])
+    with col_btn_center:
+        st.download_button(
+            label="📄 Descargar Reporte MementoMori (.docx)",
+            data=word_mementomori_bytes,
+            file_name=f"Reporte_MementoMori_{st.session_state.nombre_proj.replace(' ', '_')}.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            use_container_width=True
+        )
+
+# ------------------------------------------
+# TAB 9: DESCARGA FULL
 # ------------------------------------------
 with tab_full:
     st.markdown("### 📦 Exportación General Consolidada")
-    st.write("Descarga un archivo ZIP con todos los entregables generados (Word, Excel y CSVs).")
+    st.write("Descarga un archivo ZIP con todos los entregables generados (Reporte MementoMori, ERS Word, Excel y CSVs).")
     
     word_doc = generar_word_ers()
+    word_mementomori = generar_word_mementomori()
     excel_doc = generar_excel_estilizado()
     
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        zip_file.writestr(f"Reporte_MementoMori_{st.session_state.nombre_proj}.docx", word_mementomori)
         zip_file.writestr(f"ERS_{st.session_state.nombre_proj}.docx", word_doc)
         zip_file.writestr(f"Matrices_{st.session_state.nombre_proj}.xlsx", excel_doc)
         
