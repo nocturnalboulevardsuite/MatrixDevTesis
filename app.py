@@ -61,7 +61,7 @@ st.markdown("""
 PLANTILLAS_FLUJO = {
     "Autenticación": """graph TD
     A[Usuario] -->|Credenciales| B[API Login]
-    B -->|Validar| C{¿Es Válido?}
+    B -->|Validar| C{"¿Es Válido?"}
     C -->|Sí| D[Generar Token JWT]
     C -->|No| E[Error 401 Unauthorized]""",
 
@@ -85,7 +85,7 @@ PLANTILLAS_FLUJO = {
 
     "Crear desde cero": """graph TD
     A[Inicio] --> B[Tu Nuevo Proceso]
-    B --> C{¿Aprobado?}
+    B --> C{"¿Aprobado?"}
     C -->|Sí| D[Resultado Éxito]
     C -->|No| E[Resultado Fallo]"""
 }
@@ -844,7 +844,7 @@ with tab7:
     r_prom = df_r["Severidad"].mean() if not df_r.empty else 0.0
 
     mr1, mr2, mr3 = st.columns(3)
-    mr1.metric("⚠️️ Total de Riesgos", r_total)
+    mr1.metric("⚠ Total de Riesgos", r_total)
     mr2.metric("🔥 Riesgos Altos / Críticos", r_criticos)
     mr3.metric("📊 Severidad Promedio", f"{r_prom:.1f} / 25")
 
