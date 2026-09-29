@@ -229,7 +229,7 @@ with tab3:
         with col_s:
             estado_t = st.selectbox("Estado", ["Pendiente", "En Proceso", "Completado"], label_visibility="collapsed")
         with col_b:
-            btn_add_k = st.form_submit_button("➕ Añadir", use_container_width=True)
+            btn_add_k = st.form_submit_button(" Añadir", use_container_width=True)
             
         if btn_add_k and nueva_t.strip():
             st.session_state.kanban_tasks.append({"Tarea": nueva_t.strip(), "Estado": estado_t})
