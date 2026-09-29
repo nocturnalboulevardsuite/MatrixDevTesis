@@ -36,7 +36,7 @@ st.markdown("""
         text-align: center;
     }
     
-    /* Botones */
+    /* Botones principales y de formulario */
     .stButton>button, .stFormSubmitButton>button {
         background-color: #5c1e28;
         color: #ffffff !important;
@@ -67,20 +67,17 @@ if "integrantes" not in st.session_state:
     st.session_state.integrantes = "Juan Pérez"
 if "objetivo_text" not in st.session_state:
     st.session_state.objetivo_text = "Automatizar el flujo de inventario con una arquitectura minimalista."
-if "df_rf" not in st.session_state:
-    st.session_state.df_rf = pd.DataFrame({"Descripción": ["Autenticación OAuth2.", "CRUD de usuarios."]}, dtype=str)
-if "df_rnf" not in st.session_state:
-    st.session_state.df_rnf = pd.DataFrame({"Descripción": ["Latencia < 200ms.", "Cifrado AES-256 en base de datos."]}, dtype=str)
-if "kanban_tasks" not in st.session_state:
-    st.session_state.kanban_tasks = pd.DataFrame({"Tarea": ["Modelo BD"], "Estado": ["Completado"]}, dtype=str)
 
-# Contadores dinámicos para forzar la actualización de los editores
-if "rf_key" not in st.session_state:
-    st.session_state.rf_key = 0
-if "rnf_key" not in st.session_state:
-    st.session_state.rnf_key = 0
-if "kanban_key" not in st.session_state:
-    st.session_state.kanban_key = 0
+# Listas principales de requisitos
+if "rf_list" not in st.session_state:
+    st.session_state.rf_list = ["Autenticación OAuth2.", "CRUD de usuarios."]
+if "rnf_list" not in st.session_state:
+    st.session_state.rnf_list = ["Latencia < 200ms.", "Cifrado AES-256 en base de datos."]
+if "kanban_tasks" not in st.session_state:
+    st.session_state.kanban_tasks = [
+        {"Tarea": "Modelo BD", "Estado": "Completado"},
+        {"Tarea": "Endpoints API", "Estado": "En Proceso"}
+    ]
 
 # ==========================================
 # FUNCIONES DE GENERACIÓN DE DOCUMENTOS
@@ -91,16 +88,14 @@ def generar_word_ers():
     doc.add_paragraph(f"Objetivo: {st.session_state.objetivo_text}")
     
     doc.add_heading("Requisitos Funcionales", level=2)
-    df_rf_clean = st.session_state.df_rf.dropna(subset=["Descripción"])
-    for i, row in df_rf_clean.iterrows():
-        if str(row['Descripción']).strip() != "":
-            doc.add_paragraph(f"- {row['Descripción']}")
+    for idx, rf in enumerate(st.session_state.rf_list, 1):
+        if rf.strip():
+            doc.add_paragraph(f"RF-{idx:02d}: {rf.strip()}")
             
     doc.add_heading("Requisitos No Funcionales", level=2)
-    df_rnf_clean = st.session_state.df_rnf.dropna(subset=["Descripción"])
-    for i, row in df_rnf_clean.iterrows():
-        if str(row['Descripción']).strip() != "":
-            doc.add_paragraph(f"- {row['Descripción']}")
+    for idx, rnf in enumerate(st.session_state.rnf_list, 1):
+        if rnf.strip():
+            doc.add_paragraph(f"RNF-{idx:02d}: {rnf.strip()}")
             
     target_stream = io.BytesIO()
     doc.save(target_stream)
@@ -111,17 +106,15 @@ def generar_excel_estilizado():
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Requisitos"
-    ws.append(["Tipo", "Descripción"])
+    ws.append(["Código", "Tipo", "Descripción"])
     
-    df_rf_clean = st.session_state.df_rf.dropna(subset=["Descripción"])
-    for i, row in df_rf_clean.iterrows():
-        if str(row['Descripción']).strip() != "":
-            ws.append(["Funcional", row['Descripción']])
+    for idx, rf in enumerate(st.session_state.rf_list, 1):
+        if rf.strip():
+            ws.append([f"RF-{idx:02d}", "Funcional", rf.strip()])
             
-    df_rnf_clean = st.session_state.df_rnf.dropna(subset=["Descripción"])
-    for i, row in df_rnf_clean.iterrows():
-        if str(row['Descripción']).strip() != "":
-            ws.append(["No Funcional", row['Descripción']])
+    for idx, rnf in enumerate(st.session_state.rnf_list, 1):
+        if rnf.strip():
+            ws.append([f"RNF-{idx:02d}", "No Funcional", rnf.strip()])
             
     wb.save(output)
     return output.getvalue()
@@ -146,96 +139,121 @@ with tab1:
     st.session_state.nombre_proj = st.text_input("Nombre del Proyecto", st.session_state.nombre_proj)
     st.session_state.objetivo_text = st.text_area("Objetivo Principal", st.session_state.objetivo_text, height=80)
     
-    st.markdown("### Requisitos Funcionales")
+    st.write("---")
+    st.markdown("### Requisitos Funcionales (RF)")
     
-    # Formulario estante para añadir RF sin conflictos de estado
-    with st.form("form_rf", clear_on_submit=True):
-        col1, col2 = st.columns([4, 1])
-        with col1:
-            nuevo_rf = st.text_input("Nuevo RF", label_visibility="collapsed", placeholder="Escribe un requisito y presiona Enter o Añadir...")
-        with col2:
-            submitted_rf = st.form_submit_button("➕ Añadir", use_container_width=True)
+    # Campo para agregar un nuevo RF
+    with st.form("form_add_rf", clear_on_submit=True):
+        col_in, col_btn = st.columns([4, 1])
+        with col_in:
+            nuevo_rf_val = st.text_input("Nuevo RF", placeholder="Escribe un requisito y presiona Enter o Añadir...", label_visibility="collapsed")
+        with col_btn:
+            btn_add_rf = st.form_submit_button("➕ Añadir", use_container_width=True)
             
-        if submitted_rf and nuevo_rf.strip():
-            nuevo_df = pd.DataFrame({"Descripción": [nuevo_rf.strip()]})
-            st.session_state.df_rf = pd.concat([st.session_state.df_rf, nuevo_df], ignore_index=True)
-            st.session_state.rf_key += 1
+        if btn_add_rf and nuevo_rf_val.strip():
+            st.session_state.rf_list.append(nuevo_rf_val.strip())
             st.rerun()
 
-    st.session_state.df_rf = st.data_editor(
-        st.session_state.df_rf, 
-        num_rows="dynamic", 
-        use_container_width=True,
-        hide_index=True,
-        column_config={"Descripción": st.column_config.TextColumn("Descripción", required=True)},
-        key=f"editor_rf_{st.session_state.rf_key}"
-    )
-    
-    st.markdown("### Requisitos No Funcionales")
-    
-    # Formulario estante para añadir RNF sin conflictos de estado
-    with st.form("form_rnf", clear_on_submit=True):
-        col3, col4 = st.columns([4, 1])
-        with col3:
-            nuevo_rnf = st.text_input("Nuevo RNF", label_visibility="collapsed", placeholder="Escribe un requisito no funcional y presiona Enter o Añadir...")
-        with col4:
-            submitted_rnf = st.form_submit_button("➕ Añadir", use_container_width=True)
+    # Listado editable de RF
+    if not st.session_state.rf_list:
+        st.info("No hay requisitos funcionales registrados.")
+    else:
+        rf_to_delete = None
+        for i, item in enumerate(st.session_state.rf_list):
+            c_tag, c_input, c_del = st.columns([0.8, 5, 0.8])
+            c_tag.markdown(f"**RF-{i+1:02d}**")
+            new_val = c_input.text_input(f"rf_in_{i}", value=item, label_visibility="collapsed", key=f"rf_field_{i}")
+            st.session_state.rf_list[i] = new_val
             
-        if submitted_rnf and nuevo_rnf.strip():
-            nuevo_df = pd.DataFrame({"Descripción": [nuevo_rnf.strip()]})
-            st.session_state.df_rnf = pd.concat([st.session_state.df_rnf, nuevo_df], ignore_index=True)
-            st.session_state.rnf_key += 1
+            if c_del.button("🗑️", key=f"del_rf_{i}", help="Eliminar requisito"):
+                rf_to_delete = i
+
+        if rf_to_delete is not None:
+            st.session_state.rf_list.pop(rf_to_delete)
             st.rerun()
 
-    st.session_state.df_rnf = st.data_editor(
-        st.session_state.df_rnf, 
-        num_rows="dynamic", 
-        use_container_width=True,
-        hide_index=True,
-        column_config={"Descripción": st.column_config.TextColumn("Descripción", required=True)},
-        key=f"editor_rnf_{st.session_state.rnf_key}"
-    )
+    st.write("---")
+    st.markdown("### Requisitos No Funcionales (RNF)")
+    
+    # Campo para agregar un nuevo RNF
+    with st.form("form_add_rnf", clear_on_submit=True):
+        col_in_rnf, col_btn_rnf = st.columns([4, 1])
+        with col_in_rnf:
+            nuevo_rnf_val = st.text_input("Nuevo RNF", placeholder="Escribe un requisito no funcional y presiona Enter o Añadir...", label_visibility="collapsed")
+        with col_btn_rnf:
+            btn_add_rnf = st.form_submit_button("➕ Añadir", use_container_width=True)
+            
+        if btn_add_rnf and nuevo_rnf_val.strip():
+            st.session_state.rnf_list.append(nuevo_rnf_val.strip())
+            st.rerun()
+
+    # Listado editable de RNF
+    if not st.session_state.rnf_list:
+        st.info("No hay requisitos no funcionales registrados.")
+    else:
+        rnf_to_delete = None
+        for i, item in enumerate(st.session_state.rnf_list):
+            c_tag, c_input, c_del = st.columns([0.8, 5, 0.8])
+            c_tag.markdown(f"**RNF-{i+1:02d}**")
+            new_val = c_input.text_input(f"rnf_in_{i}", value=item, label_visibility="collapsed", key=f"rnf_field_{i}")
+            st.session_state.rnf_list[i] = new_val
+            
+            if c_del.button("🗑️", key=f"del_rnf_{i}", help="Eliminar requisito"):
+                rnf_to_delete = i
+
+        if rnf_to_delete is not None:
+            st.session_state.rnf_list.pop(rnf_to_delete)
+            st.rerun()
 
 # --- TAB 2: MODELADO ---
 with tab2:
     st.markdown("### Arquitectura Visual")
     default_mermaid = "graph TD\n A[Inicio] --> B{Validar}\n B -- Sí --> C[Éxito]\n B -- No --> D[Error]"
-    codigo_mermaid = st.text_area("Sintaxis Mermaid", value=default_mermaid, height=100)
+    codigo_mermaid = st.text_area("Sintaxis Mermaid", value=default_mermaid, height=120)
     st_mermaid(codigo_mermaid)
 
 # --- TAB 3: GESTIÓN ---
 with tab3:
     st.markdown("### Tablero Kanban")
     
+    # Agregar nueva tarea
     with st.form("form_kanban", clear_on_submit=True):
-        col5, col6 = st.columns([4, 1])
-        with col5:
-            nueva_tarea = st.text_input("Nueva Tarea", label_visibility="collapsed", placeholder="Escribe una nueva tarea y presiona Enter o Añadir...")
-        with col6:
-            submitted_kanban = st.form_submit_button("➕ Añadir", use_container_width=True)
+        col_t, col_s, col_b = st.columns([3, 2, 1])
+        with col_t:
+            nueva_t = st.text_input("Tarea", placeholder="Nueva tarea...", label_visibility="collapsed")
+        with col_s:
+            estado_t = st.selectbox("Estado", ["Pendiente", "En Proceso", "Completado"], label_visibility="collapsed")
+        with col_b:
+            btn_add_k = st.form_submit_button("➕ Añadir", use_container_width=True)
             
-        if submitted_kanban and nueva_tarea.strip():
-            nuevo_df = pd.DataFrame({"Tarea": [nueva_tarea.strip()], "Estado": ["Pendiente"]})
-            st.session_state.kanban_tasks = pd.concat([st.session_state.kanban_tasks, nuevo_df], ignore_index=True)
-            st.session_state.kanban_key += 1
+        if btn_add_k and nueva_t.strip():
+            st.session_state.kanban_tasks.append({"Tarea": nueva_t.strip(), "Estado": estado_t})
             st.rerun()
 
-    st.session_state.kanban_tasks = st.data_editor(
-        st.session_state.kanban_tasks, 
-        num_rows="dynamic", 
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Tarea": st.column_config.TextColumn("Tarea", required=True),
-            "Estado": st.column_config.SelectboxColumn("Estado", options=["Pendiente", "En Proceso", "Completado"], required=True)
-        },
-        key=f"editor_kanban_{st.session_state.kanban_key}"
-    )
+    # Mostrar lista editable de tareas
+    if not st.session_state.kanban_tasks:
+        st.info("No hay tareas registradas en el tablero.")
+    else:
+        task_to_delete = None
+        for i, t in enumerate(st.session_state.kanban_tasks):
+            col_txt, col_sel, col_d = st.columns([3, 2, 0.8])
+            updated_text = col_txt.text_input(f"kt_{i}", value=t["Tarea"], label_visibility="collapsed", key=f"kt_in_{i}")
+            updated_status = col_sel.selectbox(f"ks_{i}", ["Pendiente", "En Proceso", "Completado"], index=["Pendiente", "En Proceso", "Completado"].index(t["Estado"]), label_visibility="collapsed", key=f"ks_in_{i}")
+            
+            st.session_state.kanban_tasks[i]["Tarea"] = updated_text
+            st.session_state.kanban_tasks[i]["Estado"] = updated_status
+            
+            if col_d.button("🗑️", key=f"del_k_{i}"):
+                task_to_delete = i
+                
+        if task_to_delete is not None:
+            st.session_state.kanban_tasks.pop(task_to_delete)
+            st.rerun()
 
-# --- TAB 4: REPORTE FULL (DESCARGA DE TODO) ---
+# --- TAB 4: REPORTE FULL ---
 with tab_full:
     st.markdown("### 📦 Exportación General Consolidada")
-    st.write("Descarga un archivo ZIP que contiene todos los modelos, matrices y requerimientos configurados en las pestañas anteriores.")
+    st.write("Descarga un archivo ZIP que contiene los requisitos en Word, la matriz en Excel y las tareas en CSV.")
     
     word_doc = generar_word_ers()
     excel_doc = generar_excel_estilizado()
@@ -245,8 +263,8 @@ with tab_full:
         zip_file.writestr(f"ERS_{st.session_state.nombre_proj}.docx", word_doc)
         zip_file.writestr(f"Matrices_{st.session_state.nombre_proj}.xlsx", excel_doc)
         
-        kanban_csv = st.session_state.kanban_tasks.to_csv(index=False).encode('utf-8')
-        zip_file.writestr("Kanban_Tareas.csv", kanban_csv)
+        df_kanban = pd.DataFrame(st.session_state.kanban_tasks)
+        zip_file.writestr("Kanban_Tareas.csv", df_kanban.to_csv(index=False).encode('utf-8'))
 
     st.write("") 
     col1, col2, col3 = st.columns([1, 2, 1])
