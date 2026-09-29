@@ -70,7 +70,7 @@ if "objetivo_text" not in st.session_state:
 if "df_rf" not in st.session_state:
     st.session_state.df_rf = pd.DataFrame([{"Descripción": "Autenticación OAuth2."}, {"Descripción": "CRUD de usuarios."}])
 if "df_rnf" not in st.session_state:
-    st.session_state.df_rnf = pd.DataFrame([{"Descripción": "Latencia < 200ms."}])
+    st.session_state.df_rnf = pd.DataFrame([{"Descripción": "Latencia < 200ms."}, {"Descripción": "Cifrado AES-256 en base de datos."}])
 if "kanban_tasks" not in st.session_state:
     st.session_state.kanban_tasks = pd.DataFrame([{"Tarea": "Modelo BD", "Estado": "Completado"}])
 if "df_mc_tasks" not in st.session_state:
@@ -83,10 +83,20 @@ def generar_word_ers():
     doc = Document()
     doc.add_heading(f"Especificación de Requisitos: {st.session_state.nombre_proj}", level=1)
     doc.add_paragraph(f"Objetivo: {st.session_state.objetivo_text}")
-    # (Aquí iría la lógica completa de Word que ya tenías, resumida para este ejemplo)
+    
     doc.add_heading("Requisitos Funcionales", level=2)
-    for i, row in st.session_state.df_rf.iterrows():
-        doc.add_paragraph(f"- {row['Descripción']}")
+    # Filtrar vacíos antes de exportar
+    df_rf_clean = st.session_state.df_rf.dropna(subset=["Descripción"])
+    for i, row in df_rf_clean.iterrows():
+        if str(row['Descripción']).strip() != "":
+            doc.add_paragraph(f"- {row['Descripción']}")
+            
+    doc.add_heading("Requisitos No Funcionales", level=2)
+    df_rnf_clean = st.session_state.df_rnf.dropna(subset=["Descripción"])
+    for i, row in df_rnf_clean.iterrows():
+        if str(row['Descripción']).strip() != "":
+            doc.add_paragraph(f"- {row['Descripción']}")
+            
     target_stream = io.BytesIO()
     doc.save(target_stream)
     return target_stream.getvalue()
@@ -97,10 +107,17 @@ def generar_excel_estilizado():
     ws = wb.active
     ws.title = "Requisitos"
     ws.append(["Tipo", "Descripción"])
-    for i, row in st.session_state.df_rf.iterrows():
-        ws.append(["Funcional", row['Descripción']])
-    for i, row in st.session_state.df_rnf.iterrows():
-        ws.append(["No Funcional", row['Descripción']])
+    
+    df_rf_clean = st.session_state.df_rf.dropna(subset=["Descripción"])
+    for i, row in df_rf_clean.iterrows():
+        if str(row['Descripción']).strip() != "":
+            ws.append(["Funcional", row['Descripción']])
+            
+    df_rnf_clean = st.session_state.df_rnf.dropna(subset=["Descripción"])
+    for i, row in df_rnf_clean.iterrows():
+        if str(row['Descripción']).strip() != "":
+            ws.append(["No Funcional", row['Descripción']])
+            
     wb.save(output)
     return output.getvalue()
 
@@ -126,7 +143,26 @@ with tab1:
     st.session_state.objetivo_text = st.text_area("Objetivo Principal", st.session_state.objetivo_text, height=80)
     
     st.markdown("### Requisitos Funcionales")
-    st.session_state.df_rf = st.data_editor(st.session_state.df_rf, num_rows="dynamic", use_container_width=True)
+    st.session_state.df_rf = st.data_editor(
+        st.session_state.df_rf, 
+        num_rows="dynamic", 
+        use_container_width=True,
+        column_config={
+            "Descripción": st.column_config.TextColumn("Descripción", default="")
+        },
+        key="editor_rf"
+    )
+    
+    st.markdown("### Requisitos No Funcionales")
+    st.session_state.df_rnf = st.data_editor(
+        st.session_state.df_rnf, 
+        num_rows="dynamic", 
+        use_container_width=True,
+        column_config={
+            "Descripción": st.column_config.TextColumn("Descripción", default="")
+        },
+        key="editor_rnf"
+    )
 
 # --- TAB 2: MODELADO ---
 with tab2:
@@ -138,7 +174,15 @@ with tab2:
 # --- TAB 3: GESTIÓN ---
 with tab3:
     st.markdown("### Tablero Kanban")
-    st.session_state.kanban_tasks = st.data_editor(st.session_state.kanban_tasks, num_rows="dynamic", use_container_width=True)
+    st.session_state.kanban_tasks = st.data_editor(
+        st.session_state.kanban_tasks, 
+        num_rows="dynamic", 
+        use_container_width=True,
+        column_config={
+            "Tarea": st.column_config.TextColumn("Tarea", default=""),
+            "Estado": st.column_config.SelectboxColumn("Estado", options=["Pendiente", "En Proceso", "Completado"])
+        }
+    )
 
 # --- TAB 4: REPORTE FULL (DESCARGA DE TODO) ---
 with tab_full:
