@@ -29,15 +29,15 @@ st.markdown("""
         font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     }
     
-    /* Encabezados épicos */
+    /* Encabezados */
     h1, h2, h3 {
         color: #e09f9f !important;
         font-weight: 300 !important;
         text-align: center;
     }
     
-    /* Botones minimalistas */
-    .stButton>button {
+    /* Botones */
+    .stButton>button, .stFormSubmitButton>button {
         background-color: #5c1e28;
         color: #ffffff !important;
         border: 1px solid #8a2d3b;
@@ -45,7 +45,7 @@ st.markdown("""
         transition: 0.3s;
         font-weight: bold;
     }
-    .stButton>button:hover {
+    .stButton>button:hover, .stFormSubmitButton>button:hover {
         background-color: #8a2d3b;
         border-color: #ffffff;
         box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
@@ -74,34 +74,13 @@ if "df_rnf" not in st.session_state:
 if "kanban_tasks" not in st.session_state:
     st.session_state.kanban_tasks = pd.DataFrame({"Tarea": ["Modelo BD"], "Estado": ["Completado"]}, dtype=str)
 
-# Variables auxiliares para los campos de texto
-if "input_nuevo_rf" not in st.session_state:
-    st.session_state.input_nuevo_rf = ""
-if "input_nuevo_rnf" not in st.session_state:
-    st.session_state.input_nuevo_rnf = ""
-if "input_nueva_tarea" not in st.session_state:
-    st.session_state.input_nueva_tarea = ""
-
-# ==========================================
-# FUNCIONES CALLBACK (Añadir sin errores)
-# ==========================================
-def agregar_rf():
-    if st.session_state.input_nuevo_rf.strip():
-        nuevo_df = pd.DataFrame({"Descripción": [st.session_state.input_nuevo_rf.strip()]})
-        st.session_state.df_rf = pd.concat([st.session_state.df_rf, nuevo_df], ignore_index=True)
-        st.session_state.input_nuevo_rf = "" # Limpia la barra al añadir
-
-def agregar_rnf():
-    if st.session_state.input_nuevo_rnf.strip():
-        nuevo_df = pd.DataFrame({"Descripción": [st.session_state.input_nuevo_rnf.strip()]})
-        st.session_state.df_rnf = pd.concat([st.session_state.df_rnf, nuevo_df], ignore_index=True)
-        st.session_state.input_nuevo_rnf = ""
-
-def agregar_tarea():
-    if st.session_state.input_nueva_tarea.strip():
-        nuevo_df = pd.DataFrame({"Tarea": [st.session_state.input_nueva_tarea.strip()], "Estado": ["Pendiente"]})
-        st.session_state.kanban_tasks = pd.concat([st.session_state.kanban_tasks, nuevo_df], ignore_index=True)
-        st.session_state.input_nueva_tarea = ""
+# Contadores dinámicos para forzar la actualización de los editores
+if "rf_key" not in st.session_state:
+    st.session_state.rf_key = 0
+if "rnf_key" not in st.session_state:
+    st.session_state.rnf_key = 0
+if "kanban_key" not in st.session_state:
+    st.session_state.kanban_key = 0
 
 # ==========================================
 # FUNCIONES DE GENERACIÓN DE DOCUMENTOS
@@ -169,31 +148,44 @@ with tab1:
     
     st.markdown("### Requisitos Funcionales")
     
-    # Nuevo formulario robusto para añadir RF
-    col1, col2 = st.columns([4, 1])
-    with col1:
-        st.text_input("Nuevo RF", key="input_nuevo_rf", label_visibility="collapsed", placeholder="Escribe un requisito y presiona Enter...", on_change=agregar_rf)
-    with col2:
-        st.button("➕ Añadir", key="btn_rf", on_click=agregar_rf, use_container_width=True)
+    # Formulario estante para añadir RF sin conflictos de estado
+    with st.form("form_rf", clear_on_submit=True):
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            nuevo_rf = st.text_input("Nuevo RF", label_visibility="collapsed", placeholder="Escribe un requisito y presiona Enter o Añadir...")
+        with col2:
+            submitted_rf = st.form_submit_button("➕ Añadir", use_container_width=True)
+            
+        if submitted_rf and nuevo_rf.strip():
+            nuevo_df = pd.DataFrame({"Descripción": [nuevo_rf.strip()]})
+            st.session_state.df_rf = pd.concat([st.session_state.df_rf, nuevo_df], ignore_index=True)
+            st.session_state.rf_key += 1
+            st.rerun()
 
-    # La tabla ahora se usa principalmente para visualizar, editar datos existentes o borrar
     st.session_state.df_rf = st.data_editor(
         st.session_state.df_rf, 
         num_rows="dynamic", 
         use_container_width=True,
         hide_index=True,
         column_config={"Descripción": st.column_config.TextColumn("Descripción", required=True)},
-        key="editor_rf"
+        key=f"editor_rf_{st.session_state.rf_key}"
     )
     
     st.markdown("### Requisitos No Funcionales")
     
-    # Nuevo formulario robusto para añadir RNF
-    col3, col4 = st.columns([4, 1])
-    with col3:
-        st.text_input("Nuevo RNF", key="input_nuevo_rnf", label_visibility="collapsed", placeholder="Escribe un requisito no funcional y presiona Enter...", on_change=agregar_rnf)
-    with col4:
-        st.button("➕ Añadir", key="btn_rnf", on_click=agregar_rnf, use_container_width=True)
+    # Formulario estante para añadir RNF sin conflictos de estado
+    with st.form("form_rnf", clear_on_submit=True):
+        col3, col4 = st.columns([4, 1])
+        with col3:
+            nuevo_rnf = st.text_input("Nuevo RNF", label_visibility="collapsed", placeholder="Escribe un requisito no funcional y presiona Enter o Añadir...")
+        with col4:
+            submitted_rnf = st.form_submit_button("➕ Añadir", use_container_width=True)
+            
+        if submitted_rnf and nuevo_rnf.strip():
+            nuevo_df = pd.DataFrame({"Descripción": [nuevo_rnf.strip()]})
+            st.session_state.df_rnf = pd.concat([st.session_state.df_rnf, nuevo_df], ignore_index=True)
+            st.session_state.rnf_key += 1
+            st.rerun()
 
     st.session_state.df_rnf = st.data_editor(
         st.session_state.df_rnf, 
@@ -201,7 +193,7 @@ with tab1:
         use_container_width=True,
         hide_index=True,
         column_config={"Descripción": st.column_config.TextColumn("Descripción", required=True)},
-        key="editor_rnf"
+        key=f"editor_rnf_{st.session_state.rnf_key}"
     )
 
 # --- TAB 2: MODELADO ---
@@ -215,12 +207,18 @@ with tab2:
 with tab3:
     st.markdown("### Tablero Kanban")
     
-    # Nuevo formulario robusto para añadir Tareas
-    col5, col6 = st.columns([4, 1])
-    with col5:
-        st.text_input("Nueva Tarea", key="input_nueva_tarea", label_visibility="collapsed", placeholder="Escribe una nueva tarea y presiona Enter...", on_change=agregar_tarea)
-    with col6:
-        st.button("➕ Añadir", key="btn_tarea", on_click=agregar_tarea, use_container_width=True)
+    with st.form("form_kanban", clear_on_submit=True):
+        col5, col6 = st.columns([4, 1])
+        with col5:
+            nueva_tarea = st.text_input("Nueva Tarea", label_visibility="collapsed", placeholder="Escribe una nueva tarea y presiona Enter o Añadir...")
+        with col6:
+            submitted_kanban = st.form_submit_button("➕ Añadir", use_container_width=True)
+            
+        if submitted_kanban and nueva_tarea.strip():
+            nuevo_df = pd.DataFrame({"Tarea": [nueva_tarea.strip()], "Estado": ["Pendiente"]})
+            st.session_state.kanban_tasks = pd.concat([st.session_state.kanban_tasks, nuevo_df], ignore_index=True)
+            st.session_state.kanban_key += 1
+            st.rerun()
 
     st.session_state.kanban_tasks = st.data_editor(
         st.session_state.kanban_tasks, 
@@ -231,7 +229,7 @@ with tab3:
             "Tarea": st.column_config.TextColumn("Tarea", required=True),
             "Estado": st.column_config.SelectboxColumn("Estado", options=["Pendiente", "En Proceso", "Completado"], required=True)
         },
-        key="editor_kanban"
+        key=f"editor_kanban_{st.session_state.kanban_key}"
     )
 
 # --- TAB 4: REPORTE FULL (DESCARGA DE TODO) ---
@@ -239,19 +237,16 @@ with tab_full:
     st.markdown("### 📦 Exportación General Consolidada")
     st.write("Descarga un archivo ZIP que contiene todos los modelos, matrices y requerimientos configurados en las pestañas anteriores.")
     
-    # Pre-generar archivos
     word_doc = generar_word_ers()
     excel_doc = generar_excel_estilizado()
     
-    # Crear ZIP en memoria
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
         zip_file.writestr(f"ERS_{st.session_state.nombre_proj}.docx", word_doc)
         zip_file.writestr(f"Matrices_{st.session_state.nombre_proj}.xlsx", excel_doc)
         
-        # Guardar también los datos del Kanban en CSV dentro del ZIP
         kanban_csv = st.session_state.kanban_tasks.to_csv(index=False).encode('utf-8')
-        zip_file.writestr(f"Kanban_Tareas.csv", kanban_csv)
+        zip_file.writestr("Kanban_Tareas.csv", kanban_csv)
 
     st.write("") 
     col1, col2, col3 = st.columns([1, 2, 1])
