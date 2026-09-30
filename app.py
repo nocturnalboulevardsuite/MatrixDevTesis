@@ -17,9 +17,9 @@ from docx.shared import Pt, RGBColor
 # ==========================================
 st.set_page_config(page_title="MatrixDev Tesis", layout="wide", page_icon="🍷")
 
-# Inicialización del tema en session_state
+# Inicialización del tema en session_state (Por defecto: Claro)
 if "tema" not in st.session_state:
-    st.session_state.tema = "vino"  # Opciones: "vino", "oscuro", "claro"
+    st.session_state.tema = "claro"  # Opciones: "vino", "oscuro", "claro"
 
 # Configuración de colores según el tema seleccionado
 if st.session_state.tema == "oscuro":
@@ -33,18 +33,7 @@ if st.session_state.tema == "oscuro":
     graph_text = "#f4f4f5"
     graph_bar = "#38bdf8"
     grid_color = "#27272a"
-elif st.session_state.tema == "claro":
-    bg_color = "#ffffff"
-    text_color = "#0f172a"
-    heading_color = "#1d4ed8"
-    sub_color = "#475569"
-    btn_bg = "#f1f5f9"
-    btn_border = "#cbd5e1"
-    btn_hover = "#e2e8f0"
-    graph_text = "#0f172a"
-    graph_bar = "#2563eb"
-    grid_color = "#e2e8f0"
-else:  # "vino" (Por defecto)
+elif st.session_state.tema == "vino":
     bg_color = "#2c0f14"
     text_color = "#f4ecec"
     heading_color = "#e09f9f"
@@ -55,6 +44,17 @@ else:  # "vino" (Por defecto)
     graph_text = "#f4ecec"
     graph_bar = "#e09f9f"
     grid_color = "#442026"
+else:  # "claro" (Por defecto)
+    bg_color = "#ffffff"
+    text_color = "#0f172a"
+    heading_color = "#1d4ed8"
+    sub_color = "#475569"
+    btn_bg = "#f1f5f9"
+    btn_border = "#cbd5e1"
+    btn_hover = "#e2e8f0"
+    graph_text = "#0f172a"
+    graph_bar = "#2563eb"
+    grid_color = "#e2e8f0"
 
 # Inyección de CSS dinámico
 st.markdown(f"""
@@ -1134,7 +1134,7 @@ with tab_full:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.download_button(
-            label="⬇️️ Descargar Reporte Full (.ZIP)",
+            label="⬇ Descargar Reporte Full (.ZIP)",
             data=zip_buffer.getvalue(),
             file_name=f"Reporte_Full_{st.session_state.nombre_proj.replace(' ', '_')}.zip",
             mime="application/zip",
