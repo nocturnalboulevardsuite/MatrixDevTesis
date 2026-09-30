@@ -34,13 +34,13 @@ if st.session_state.tema == "oscuro":
     graph_bar = "#38bdf8"
     grid_color = "#27272a"
 elif st.session_state.tema == "claro":
-    bg_color = "#f8fafc"
+    bg_color = "#ffffff"
     text_color = "#0f172a"
-    heading_color = "#2563eb"
-    sub_color = "#64748b"
-    btn_bg = "#e2e8f0"
+    heading_color = "#1d4ed8"
+    sub_color = "#475569"
+    btn_bg = "#f1f5f9"
     btn_border = "#cbd5e1"
-    btn_hover = "#cbd5e1"
+    btn_hover = "#e2e8f0"
     graph_text = "#0f172a"
     graph_bar = "#2563eb"
     grid_color = "#e2e8f0"
@@ -59,32 +59,74 @@ else:  # "vino" (Por defecto)
 # Inyección de CSS dinámico
 st.markdown(f"""
     <style>
-    /* Fondo principal y color de texto */
-    .stApp {{
-        background-color: {bg_color};
-        color: {text_color};
+    /* Fondo principal y color de texto global */
+    .stApp, .stAppHeader, [data-testid="stHeader"] {{
+        background-color: {bg_color} !important;
+        color: {text_color} !important;
         font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     }}
     
     /* Encabezados */
-    h1, h2, h3 {{
+    h1, h2, h3, h4, h5, h6 {{
         color: {heading_color} !important;
         font-weight: 300 !important;
         text-align: center;
     }}
     
+    /* Pestañas (Tabs) */
+    .stTabs [data-baseweb="tab-list"] {{
+        gap: 8px;
+    }}
+    .stTabs [data-baseweb="tab-list"] button {{
+        background-color: transparent !important;
+        border-radius: 4px;
+        padding: 8px 16px;
+    }}
+    .stTabs [data-baseweb="tab-list"] button p {{
+        color: {sub_color} !important;
+        font-size: 1rem;
+        font-weight: 500;
+    }}
+    .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] p {{
+        color: {heading_color} !important;
+        font-weight: bold;
+    }}
+    .stTabs [data-baseweb="tab-highlight"] {{
+        background-color: {heading_color} !important;
+    }}
+
+    /* Textos generales, párrafos y etiquetas */
+    p, span, label, div, .stMarkdown {{
+        color: {text_color};
+    }}
+
+    /* Inputs, Selects y Textareas */
+    div[data-baseweb="input"] > div, div[data-baseweb="select"] > div {{
+        background-color: {btn_bg} !important;
+        color: {text_color} !important;
+        border-color: {btn_border} !important;
+    }}
+    input, textarea {{
+        color: {text_color} !important;
+    }}
+
+    /* Métricas */
+    [data-testid="stMetricValue"], [data-testid="stMetricLabel"] {{
+        color: {text_color} !important;
+    }}
+
     /* Botones */
     .stButton>button, .stFormSubmitButton>button {{
-        background-color: {btn_bg};
+        background-color: {btn_bg} !important;
         color: {text_color} !important;
-        border: 1px solid {btn_border};
+        border: 1px solid {btn_border} !important;
         border-radius: 8px;
         transition: 0.3s;
         font-weight: bold;
     }}
     .stButton>button:hover, .stFormSubmitButton>button:hover {{
-        background-color: {btn_hover};
-        border-color: {heading_color};
+        background-color: {btn_hover} !important;
+        border-color: {heading_color} !important;
         box-shadow: 0px 4px 10px rgba(0,0,0,0.2);
     }}
 
@@ -475,7 +517,6 @@ def generar_word_mementomori():
 
     # 8. CONCLUSIONES
     doc.add_heading("8. Conclusiones y Recomendaciones Finales", level=1)
-    p85_val = st.session_state.get("p85_val", 25.0)
     doc.add_paragraph(
         f"El proyecto '{st.session_state.nombre_proj}' cuenta con una base metodológica y técnica sólida. "
         f"Se recomienda formalizar el compromiso de entrega considerando la simulación de Monte Carlo "
@@ -529,8 +570,8 @@ def generar_excel_estilizado():
 st.title("✦ MatrixDev ✦")
 st.markdown(f"<p style='text-align: center; color: {sub_color};'>Gestión y Arquitectura de Proyectos</p>", unsafe_allow_html=True)
 
-# BOTONES DE CAMBIO DE TEMA VISUAL
-col_t_space, col_btn1, col_btn2, col_btn3 = st.columns([3, 1, 1, 1])
+# BOTONES DE CAMBIO DE TEMA VISUAL CENTRADOS
+col_sp1, col_btn1, col_btn2, col_btn3, col_sp2 = st.columns([1.5, 1, 1, 1, 1.5])
 
 with col_btn1:
     if st.button("Vino Tinto", use_container_width=True):
@@ -543,7 +584,7 @@ with col_btn2:
         st.rerun()
 
 with col_btn3:
-    if st.button("Blanco", use_container_width=True):
+    if st.button("Claro", use_container_width=True):
         st.session_state.tema = "claro"
         st.rerun()
 
@@ -1093,7 +1134,7 @@ with tab_full:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.download_button(
-            label="⬇️ Descargar Reporte Full (.ZIP)",
+            label="⬇️️ Descargar Reporte Full (.ZIP)",
             data=zip_buffer.getvalue(),
             file_name=f"Reporte_Full_{st.session_state.nombre_proj.replace(' ', '_')}.zip",
             mime="application/zip",
