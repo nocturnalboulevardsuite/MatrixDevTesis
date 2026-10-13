@@ -370,21 +370,30 @@ def generar_excel_montecarlo(datos_sim):
     opt = st.session_state.get("mc_opt", 10)
     prob = st.session_state.get("mc_prob", 20)
     pes = st.session_state.get("mc_pes", 45)
+    dias_meta = st.session_state.get("mc_dias_meta", 25)
     
     p50 = np.percentile(datos_sim, 50)
     p85 = np.percentile(datos_sim, 85)
     p95 = np.percentile(datos_sim, 95)
     
+    exitos = (datos_sim <= dias_meta).sum()
+    tasa_exito = (exitos / len(datos_sim)) * 100
+    riesgo_retraso = 100 - tasa_exito
+    
     ws.append(["Proyecto:", st.session_state.nombre_proj])
     ws.append(["Días Optimista:", opt])
     ws.append(["Días Más Probable:", prob])
     ws.append(["Días Pesimista:", pes])
+    ws.append(["Días Meta / Compromiso:", dias_meta])
     ws.append(["Número Muestras:", len(datos_sim)])
     ws.append([])
-    ws.append(["Métrica / Percentil", "Duración Estimada (Días)"])
+    ws.append(["Métrica / Percentil", "Valor"])
     ws.append(["Percentil 50 (P50 - Mediana)", round(p50, 2)])
     ws.append(["Percentil 85 (P85 - Recomendado)", round(p85, 2)])
     ws.append(["Percentil 95 (P95 - Pesimista)", round(p95, 2)])
+    ws.append(["Tasa de Éxito (%)", f"{round(tasa_exito, 1)}%"])
+    ws.append(["Riesgo de Retraso (%)", f"{round(riesgo_retraso, 1)}%"])
+    ws.append(["Capacidad Anual Proyectada (Proyectos/Año)", round(365 / p85, 1) if p85 > 0 else 0])
     
     wb.save(output)
     return output.getvalue()
@@ -583,6 +592,7 @@ def generar_word_mementomori():
     sims = st.session_state.get("mc_sims", 2000)
 
     if opt <= prob <= pes:
+        np.random.seed(42)
         sim_data = np.random.triangular(left=opt, mode=prob, right=pes, size=sims)
         p50 = np.percentile(sim_data, 50)
         p85 = np.percentile(sim_data, 85)
@@ -909,27 +919,152 @@ with tab3:
         )
 
 # ------------------------------------------
-# TAB 4: MONTE CARLO
+# TAB 4: MONTE CARLO (MEJORADO & INTUITIVO)
 # ------------------------------------------
 with tab4:
-    st.markdown("### Simulación Monte Carlo de Estimación")
-    c1, c2, c3 = st.columns(3)
-    opt = c1.number_input("Días Optimista", value=10, min_value=1, key="mc_opt")
-    prob = c2.number_input("Días Más Probable", value=20, min_value=1, key="mc_prob")
-    pes = c3.number_input("Días Pesimista", value=45, min_value=1, key="mc_pes")
+    st.markdown("### 🎲 Simulación Monte Carlo & Proyección de Viabilidad")
+    st.caption("Herramienta intuitiva para proyectar tiempos, evaluar probabilidades de éxito, controlar el riesgo y planificar la entrega del proyecto.")
+
+    # Controles principales ordenados por secciones claros
+    col_inp1, col_inp2 = st.columns([1.5, 1])
     
-    simulaciones = st.slider("Número de Simulaciones", 500, 10000, 2000, step=500, key="mc_sims")
-    
+    with col_inp1:
+        st.markdown("##### ⏱️ 1. Parámetros de Duración Estimada (en Días)")
+        c1, c2, c3 = st.columns(3)
+        opt = c1.number_input("Días Optimista", value=10, min_value=1, key="mc_opt", help="Escenario ideal sin contratiempos")
+        prob = c2.number_input("Días Más Probable", value=20, min_value=1, key="mc_prob", help="Duración habitual esperada")
+        pes = c3.number_input("Días Pesimista", value=45, min_value=1, key="mc_pes", help="Escenario con bloqueos o imprevistos")
+
+    with col_inp2:
+        st.markdown("##### 📅 2. Calendario y Meta del Cliente")
+        c_f1, c_f2 = st.columns(2)
+        fecha_inicio = c_f1.date_input("Fecha de Inicio", value=pd.to_datetime("today"), key="mc_f_inicio")
+        dias_meta = c_f2.number_input("Días Meta / Compromiso", value=25, min_value=1, key="mc_dias_meta", help="Plazo límite acordado para la entrega")
+
+    st.markdown("##### ⚙️ 3. Muestreo Estadístico")
+    simulaciones = st.slider("Número de Simulaciones (Iteraciones)", 500, 10000, 2000, step=500, key="mc_sims", help="A mayor número de simulaciones, mayor precisión estadística.")
+
     if opt <= prob <= pes:
+        # Fijar semilla aleatoria para reproducibilidad al pescar iteraciones
+        np.random.seed(42)
         datos_sim = np.random.triangular(left=opt, mode=prob, right=pes, size=simulaciones)
         
-        fig = px.histogram(datos_sim, nbins=30, title="Distribución de Duración (Días)", labels={'value': 'Días'}, color_discrete_sequence=[graph_bar])
-        fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color=graph_text)
-        st.plotly_chart(fig, use_container_width=True)
-        
+        p50 = np.percentile(datos_sim, 50)
         p85 = np.percentile(datos_sim, 85)
-        st.session_state.p85_val = p85
-        st.metric("Estimación con 85% de Confianza", f"{p85:.1f} Días")
+        p95 = np.percentile(datos_sim, 95)
+        
+        # Cálculos de probabilidades y riesgos
+        exitos = (datos_sim <= dias_meta).sum()
+        tasa_exito = (exitos / simulaciones) * 100
+        riesgo_retraso = 100 - tasa_exito
+        
+        # Fechas reales calculadas
+        fecha_p50 = fecha_inicio + pd.Timedelta(days=int(np.round(p50)))
+        fecha_p85 = fecha_inicio + pd.Timedelta(days=int(np.round(p85)))
+        fecha_pesimista = fecha_inicio + pd.Timedelta(days=int(pes))
+
+        st.write("---")
+        st.markdown("#### 📊 Diagnóstico Automático y Veredicto de Viabilidad")
+        
+        # Evaluación dinámica de viabilidad
+        if tasa_exito >= 80:
+            veredicto_color = "🟢"
+            veredicto_txt = "PROYECTO ALTAMENTE VIABLE"
+            veredicto_desc = f"Existe un {tasa_exito:.1f}% de probabilidades de cumplir dentro de los {dias_meta} días meta. Es seguro proceder sin modificar recursos."
+        elif tasa_exito >= 50:
+            veredicto_color = "🟡"
+            veredicto_txt = "VIABLE CON RIESGO MODERADO"
+            veredicto_desc = f"La probabilidad de éxito es del {tasa_exito:.1f}%. Se sugiere monitoreo frecuente y reservar amortiguadores de tiempo."
+        else:
+            veredicto_color = "🔴"
+            veredicto_txt = "ALTO RIESGO DE INCUMPLIMIENTO"
+            veredicto_desc = f"Existe un {riesgo_retraso:.1f}% de riesgo de retraso frente a la meta de {dias_meta} días. Se recomienda renegociar plazos a {p85:.0f} días (P85)."
+
+        st.info(f"### {veredicto_color} {veredicto_txt}\n{veredicto_desc}")
+
+        # Tarjetas de métricas sencillas
+        m_c1, m_c2, m_c3, m_c4 = st.columns(4)
+        m_c1.metric("🎯 Tasa de Éxito", f"{tasa_exito:.1f}%", f"Meta: {dias_meta} Días")
+        m_c2.metric("⚠️ Riesgo de Retraso", f"{riesgo_retraso:.1f}%", "Nivel de Incertidumbre", delta_color="inverse")
+        m_c3.metric("📆 Fecha Entrega Segura (P85)", fecha_p85.strftime("%d/%m/%Y"), f"{p85:.1f} días esperados")
+        m_c4.metric("🚨 Fecha Límite Pesimista", fecha_pesimista.strftime("%d/%m/%Y"), f"{pes} días máx")
+
+        st.write("---")
+
+        # Gráfico Clean y Minimalista
+        st.markdown("#### 📈 Distribución Visual de Duración (Diseño Clean)")
+        
+        fig = go.Figure()
+        
+        # Barras sencillas con bordes nítidos
+        fig.add_trace(go.Histogram(
+            x=datos_sim,
+            nbinsx=35,
+            name="Simulaciones",
+            marker=dict(
+                color=graph_bar,
+                opacity=0.75,
+                line=dict(color=heading_color, width=1)
+            ),
+            hovertemplate="Duración: %{x:.1f} días<br>Muestras: %{y}<extra></extra>"
+        ))
+        
+        # Líneas de referencia contextuales
+        fig.add_vline(x=dias_meta, line_dash="dash", line_color="#ef4444", line_width=2,
+                      annotation_text=f"Meta ({dias_meta}d)", annotation_position="top left")
+        fig.add_vline(x=p50, line_dash="dot", line_color="#f59e0b", line_width=2,
+                      annotation_text=f"P50 Mediana ({p50:.1f}d)", annotation_position="top right")
+        fig.add_vline(x=p85, line_dash="solid", line_color="#10b981", line_width=2.5,
+                      annotation_text=f"P85 Seguro ({p85:.1f}d)", annotation_position="top right")
+
+        fig.update_layout(
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font_color=graph_text,
+            xaxis=dict(title="Días Estimados de Ejecución", gridcolor=grid_color, zeroline=False),
+            yaxis=dict(title="Número de Escenarios", gridcolor=grid_color, zeroline=False),
+            margin=dict(l=20, r=20, t=30, b=20),
+            height=360,
+            showlegend=False
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.write("---")
+        
+        # Inspección "Pescar Iteración" & Proyección Anual
+        col_p1, col_p2 = st.columns(2)
+
+        with col_p1:
+            st.markdown("#### 🎣 Pescar e Inspeccionar Iteración")
+            st.caption("Selecciona una iteración puntual para auditar cómo se comporta una muestra aleatoria específica.")
+            
+            iter_idx = st.slider("Número de Iteración", 1, simulaciones, 100, key="mc_slider_iter")
+            val_iter = datos_sim[iter_idx - 1]
+            fecha_iter = fecha_inicio + pd.Timedelta(days=int(np.round(val_iter)))
+            
+            estado_iter = "🟢 Cumple Meta (A tiempo)" if val_iter <= dias_meta else "🔴 Sobrepasa Meta (Retrasado)"
+            
+            st.markdown(f"""
+            * **Iteración Auditada:** **#{iter_idx}** de {simulaciones}
+            * **Duración Resultante:** **{val_iter:.1f} Días**
+            * **Fecha Proyectada de Término:** **{fecha_iter.strftime('%d/%m/%Y')}**
+            * **Resultado frente a la Meta:** {estado_iter}
+            """)
+
+        with col_p2:
+            st.markdown("#### 🚀 Proyección Anual (1 Año) y Beneficios")
+            st.caption("Capacidad operativa estimada para un horizonte continuo de 365 días.")
+            
+            ciclos_ano = 365 / p85 if p85 > 0 else 0
+            
+            st.markdown(f"""
+            * 🔄 **Capacidad de Entregas al Año:** **{ciclos_ano:.1f} Proyectos / Ciclos completos** (calculado con la fecha de compromiso seguro P85).
+            * 🛡️ **Seguridad del Compromiso:** Con el estándar P85, tu margen de fallo operativo es de solo **15%**, superando el riesgo del 50% de las estimaciones tradicionales.
+            * 💡 **Beneficios Clave:**
+                1. Evita penalizaciones y sobrecostos por demoras.
+                2. Planificación precisa de la disponibilidad del equipo.
+                3. Comunicación transparente de plazos y fechas exactas a clientes.
+            """)
 
         # DESCARGA INDIVIDUAL - TAB 4
         st.write("---")
