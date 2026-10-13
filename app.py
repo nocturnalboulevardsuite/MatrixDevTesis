@@ -361,39 +361,52 @@ def generar_excel_kanban():
     return output.getvalue()
 
 # 3.3 Monte Carlo Excel
-def generar_excel_montecarlo(datos_sim):
+def generar_excel_montecarlo(datos_dias, datos_costos=None):
     output = io.BytesIO()
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Simulación Monte Carlo"
     
-    opt = st.session_state.get("mc_opt", 10)
-    prob = st.session_state.get("mc_prob", 20)
-    pes = st.session_state.get("mc_pes", 45)
+    dist_name = st.session_state.get("mc_dist_type", "Triangular")
     dias_meta = st.session_state.get("mc_dias_meta", 25)
+    costo_meta = st.session_state.get("mc_costo_meta", 500000)
+    percentil_target = st.session_state.get("mc_target_perc", 85)
     
-    p50 = np.percentile(datos_sim, 50)
-    p85 = np.percentile(datos_sim, 85)
-    p95 = np.percentile(datos_sim, 95)
+    p50_dias = np.percentile(datos_dias, 50)
+    p_target_dias = np.percentile(datos_dias, percentil_target)
+    p95_dias = np.percentile(datos_dias, 95)
     
-    exitos = (datos_sim <= dias_meta).sum()
-    tasa_exito = (exitos / len(datos_sim)) * 100
-    riesgo_retraso = 100 - tasa_exito
+    exitos_dias = (datos_dias <= dias_meta).sum()
+    tasa_exito_dias = (exitos_dias / len(datos_dias)) * 100
+    riesgo_retraso = 100 - tasa_exito_dias
     
     ws.append(["Proyecto:", st.session_state.nombre_proj])
-    ws.append(["Días Optimista:", opt])
-    ws.append(["Días Más Probable:", prob])
-    ws.append(["Días Pesimista:", pes])
-    ws.append(["Días Meta / Compromiso:", dias_meta])
-    ws.append(["Número Muestras:", len(datos_sim)])
+    ws.append(["Modelo de Distribución Usado:", dist_name])
+    ws.append(["Días Meta (SLA Tiempo):", dias_meta])
+    ws.append(["Presupuesto Meta (SLA Costo):", costo_meta])
+    ws.append(["Número Muestras:", len(datos_dias)])
     ws.append([])
-    ws.append(["Métrica / Percentil", "Valor"])
-    ws.append(["Percentil 50 (P50 - Mediana)", round(p50, 2)])
-    ws.append(["Percentil 85 (P85 - Recomendado)", round(p85, 2)])
-    ws.append(["Percentil 95 (P95 - Pesimista)", round(p95, 2)])
-    ws.append(["Tasa de Éxito (%)", f"{round(tasa_exito, 1)}%"])
+    ws.append(["Métrica de Tiempo", "Valor (Días)"])
+    ws.append(["Percentil 50 (P50 - Mediana)", round(p50_dias, 2)])
+    ws.append([f"Percentil Objetivo (P{percentil_target})", round(p_target_dias, 2)])
+    ws.append(["Percentil 95 (P95 - Pesimista)", round(p95_dias, 2)])
+    ws.append(["Tasa de Éxito en Tiempo (%)", f"{round(tasa_exito_dias, 1)}%"])
     ws.append(["Riesgo de Retraso (%)", f"{round(riesgo_retraso, 1)}%"])
-    ws.append(["Capacidad Anual Proyectada (Proyectos/Año)", round(365 / p85, 1) if p85 > 0 else 0])
+    ws.append(["Capacidad Anual Proyectada (Proyectos/Año)", round(365 / p_target_dias, 1) if p_target_dias > 0 else 0])
+    
+    if datos_costos is not None:
+        p50_cost = np.percentile(datos_costos, 50)
+        p_target_cost = np.percentile(datos_costos, percentil_target)
+        p95_cost = np.percentile(datos_costos, 95)
+        exitos_cost = (datos_costos <= costo_meta).sum()
+        tasa_exito_cost = (exitos_cost / len(datos_costos)) * 100
+        
+        ws.append([])
+        ws.append(["Métrica de Costo Financiero", "Valor ($)"])
+        ws.append(["Costo Mediano (P50)", round(p50_cost, 2)])
+        ws.append([f"Costo Recomendado (P{percentil_target})", round(p_target_cost, 2)])
+        ws.append(["Costo Pesimista (P95)", round(p95_cost, 2)])
+        ws.append(["Tasa de Éxito Presupuestario (%)", f"{round(tasa_exito_cost, 1)}%"])
     
     wb.save(output)
     return output.getvalue()
@@ -612,7 +625,7 @@ def generar_word_mementomori():
             "lo que generará retrasos en la entrega final salvo que se mantengan controles semanales de seguimiento."
         )
     else:
-        doc.add_paragraph("Los parámetros introducidos para la simulación Monte Carlo no son válidos (requiere Optimista ≤ Más Probable ≤ Pesimista).")
+        doc.add_paragraph("Los parámetros introducidos para la simulación Monte Carlo no son válidos.")
 
     # 7. MATRIZ DE RIESGOS
     doc.add_heading("7. Evaluación y Filosofía de Riesgos (MementoMori)", level=1)
@@ -919,152 +932,289 @@ with tab3:
         )
 
 # ------------------------------------------
-# TAB 4: MONTE CARLO (MEJORADO & INTUITIVO)
+# TAB 4: MONTE CARLO (AVANZADO, CONFIGURABLE Y COMPLETO)
 # ------------------------------------------
 with tab4:
-    st.markdown("### 🎲 Simulación Monte Carlo & Proyección de Viabilidad")
-    st.caption("Herramienta intuitiva para proyectar tiempos, evaluar probabilidades de éxito, controlar el riesgo y planificar la entrega del proyecto.")
+    st.markdown("### 🎲 Simulación Monte Carlo de Tiempos y Presupuestos")
+    st.caption("Motor de análisis probabilístico de riesgo, factibilidad y capacidad proyectada.")
 
-    # Controles principales ordenados por secciones claros
-    col_inp1, col_inp2 = st.columns([1.5, 1])
-    
-    with col_inp1:
-        st.markdown("##### ⏱️ 1. Parámetros de Duración Estimada (en Días)")
-        c1, c2, c3 = st.columns(3)
-        opt = c1.number_input("Días Optimista", value=10, min_value=1, key="mc_opt", help="Escenario ideal sin contratiempos")
-        prob = c2.number_input("Días Más Probable", value=20, min_value=1, key="mc_prob", help="Duración habitual esperada")
-        pes = c3.number_input("Días Pesimista", value=45, min_value=1, key="mc_pes", help="Escenario con bloqueos o imprevistos")
-
-    with col_inp2:
-        st.markdown("##### 📅 2. Calendario y Meta del Cliente")
-        c_f1, c_f2 = st.columns(2)
-        fecha_inicio = c_f1.date_input("Fecha de Inicio", value=pd.to_datetime("today"), key="mc_f_inicio")
-        dias_meta = c_f2.number_input("Días Meta / Compromiso", value=25, min_value=1, key="mc_dias_meta", help="Plazo límite acordado para la entrega")
-
-    st.markdown("##### ⚙️ 3. Muestreo Estadístico")
-    simulaciones = st.slider("Número de Simulaciones (Iteraciones)", 500, 10000, 2000, step=500, key="mc_sims", help="A mayor número de simulaciones, mayor precisión estadística.")
-
-    if opt <= prob <= pes:
-        # Fijar semilla aleatoria para reproducibilidad al pescar iteraciones
-        np.random.seed(42)
-        datos_sim = np.random.triangular(left=opt, mode=prob, right=pes, size=simulaciones)
+    # GUÍA EXPLICATIVA INTUITIVA
+    with st.expander("📖 **Guía Intuitiva: ¿Cómo entender la Simulación Monte Carlo?**", expanded=False):
+        st.markdown("""
+        **¿Qué es Monte Carlo?** Es un método estadístico que ejecuta miles de escenarios simulados (iteraciones) variando los tiempos y costos según la incertidumbre real del proyecto.
         
-        p50 = np.percentile(datos_sim, 50)
-        p85 = np.percentile(datos_sim, 85)
-        p95 = np.percentile(datos_sim, 95)
-        
-        # Cálculos de probabilidades y riesgos
-        exitos = (datos_sim <= dias_meta).sum()
-        tasa_exito = (exitos / simulaciones) * 100
-        riesgo_retraso = 100 - tasa_exito
-        
-        # Fechas reales calculadas
-        fecha_p50 = fecha_inicio + pd.Timedelta(days=int(np.round(p50)))
-        fecha_p85 = fecha_inicio + pd.Timedelta(days=int(np.round(p85)))
-        fecha_pesimista = fecha_inicio + pd.Timedelta(days=int(pes))
+        * **Modelos de Distribución:**
+            * 📐 **Triangular:** Basada en 3 estimaciones simples (Optimista, Más Probable, Pesimista).
+            * 📊 **Beta-PERT:** Estándar de la metodología PMBOK. Da más peso visual al valor 'Más Probable'.
+            * 🔔 **Normal / Gaussiana:** Para procesos maduros con comportamiento en campana (Media y Desviación).
+            * 🟦 **Uniforme:** Incertidumbre total, cualquier duración entre el Mínimo y Máximo es igual de probable.
+        * **Percentiles Clave:**
+            * **P50 (Mediana):** 50% de probabilidad de terminar antes de este tiempo. Es como tirar una moneda.
+            * **P85 (Compromiso Recomendado):** Estándar de la industria. 85% de probabilidad de éxito.
+            * **P95 (Escenario Pesimista):** Cubre el 95% de todos los imprevistos y bloqueos posibles.
+        """)
 
-        st.write("---")
-        st.markdown("#### 📊 Diagnóstico Automático y Veredicto de Viabilidad")
-        
-        # Evaluación dinámica de viabilidad
-        if tasa_exito >= 80:
-            veredicto_color = "🟢"
-            veredicto_txt = "PROYECTO ALTAMENTE VIABLE"
-            veredicto_desc = f"Existe un {tasa_exito:.1f}% de probabilidades de cumplir dentro de los {dias_meta} días meta. Es seguro proceder sin modificar recursos."
-        elif tasa_exito >= 50:
-            veredicto_color = "🟡"
-            veredicto_txt = "VIABLE CON RIESGO MODERADO"
-            veredicto_desc = f"La probabilidad de éxito es del {tasa_exito:.1f}%. Se sugiere monitoreo frecuente y reservar amortiguadores de tiempo."
-        else:
-            veredicto_color = "🔴"
-            veredicto_txt = "ALTO RIESGO DE INCUMPLIMIENTO"
-            veredicto_desc = f"Existe un {riesgo_retraso:.1f}% de riesgo de retraso frente a la meta de {dias_meta} días. Se recomienda renegociar plazos a {p85:.0f} días (P85)."
+    st.write("---")
 
-        st.info(f"### {veredicto_color} {veredicto_txt}\n{veredicto_desc}")
+    # CONFIGURACIÓN COMPLETA DE PARÁMETROS
+    c_sec1, c_sec2, c_sec3 = st.columns([1.2, 1.2, 1])
 
-        # Tarjetas de métricas sencillas
-        m_c1, m_c2, m_c3, m_c4 = st.columns(4)
-        m_c1.metric("🎯 Tasa de Éxito", f"{tasa_exito:.1f}%", f"Meta: {dias_meta} Días")
-        m_c2.metric("⚠️ Riesgo de Retraso", f"{riesgo_retraso:.1f}%", "Nivel de Incertidumbre", delta_color="inverse")
-        m_c3.metric("📆 Fecha Entrega Segura (P85)", fecha_p85.strftime("%d/%m/%Y"), f"{p85:.1f} días esperados")
-        m_c4.metric("🚨 Fecha Límite Pesimista", fecha_pesimista.strftime("%d/%m/%Y"), f"{pes} días máx")
-
-        st.write("---")
-
-        # Gráfico Clean y Minimalista
-        st.markdown("#### 📈 Distribución Visual de Duración (Diseño Clean)")
-        
-        fig = go.Figure()
-        
-        # Barras sencillas con bordes nítidos
-        fig.add_trace(go.Histogram(
-            x=datos_sim,
-            nbinsx=35,
-            name="Simulaciones",
-            marker=dict(
-                color=graph_bar,
-                opacity=0.75,
-                line=dict(color=heading_color, width=1)
-            ),
-            hovertemplate="Duración: %{x:.1f} días<br>Muestras: %{y}<extra></extra>"
-        ))
-        
-        # Líneas de referencia contextuales
-        fig.add_vline(x=dias_meta, line_dash="dash", line_color="#ef4444", line_width=2,
-                      annotation_text=f"Meta ({dias_meta}d)", annotation_position="top left")
-        fig.add_vline(x=p50, line_dash="dot", line_color="#f59e0b", line_width=2,
-                      annotation_text=f"P50 Mediana ({p50:.1f}d)", annotation_position="top right")
-        fig.add_vline(x=p85, line_dash="solid", line_color="#10b981", line_width=2.5,
-                      annotation_text=f"P85 Seguro ({p85:.1f}d)", annotation_position="top right")
-
-        fig.update_layout(
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            font_color=graph_text,
-            xaxis=dict(title="Días Estimados de Ejecución", gridcolor=grid_color, zeroline=False),
-            yaxis=dict(title="Número de Escenarios", gridcolor=grid_color, zeroline=False),
-            margin=dict(l=20, r=20, t=30, b=20),
-            height=360,
-            showlegend=False
+    with c_sec1:
+        st.markdown("##### 📐 1. Modelo Estadístico & Tiempos")
+        tipo_dist = st.selectbox(
+            "Distribución Probabilística",
+            ["Triangular", "Beta-PERT", "Normal", "Uniforme"],
+            key="mc_dist_type",
+            help="Selecciona el modelo matemático para generar la variabilidad aleatoria"
         )
-        st.plotly_chart(fig, use_container_width=True)
+
+        if tipo_dist in ["Triangular", "Beta-PERT"]:
+            mc_opt = st.number_input("Días Optimista (Mínimo)", value=10, min_value=1, key="mc_opt")
+            mc_prob = st.number_input("Días Más Probable (Moda)", value=20, min_value=1, key="mc_prob")
+            mc_pes = st.number_input("Días Pesimista (Máximo)", value=45, min_value=1, key="mc_pes")
+        elif tipo_dist == "Normal":
+            mc_mean = st.number_input("Duración Promedio (Días)", value=22.0, min_value=1.0, key="mc_mean")
+            mc_std = st.number_input("Desviación Estándar (Días)", value=5.0, min_value=0.1, key="mc_std")
+        elif tipo_dist == "Uniforme":
+            mc_min = st.number_input("Días Mínimos", value=12, min_value=1, key="mc_min_u")
+            mc_max = st.number_input("Días Máximos", value=40, min_value=1, key="mc_max_u")
+
+    with c_sec2:
+        st.markdown("##### 💰 2. Modelo Financiero / Costos")
+        costo_fijo = st.number_input("Costo Fijo Base del Proyecto ($)", value=100000, step=10000, key="mc_cfijo")
+        costo_diario = st.number_input("Costo Operativo por Día ($/Día)", value=15000, step=1000, key="mc_cdiario")
+        costo_meta = st.number_input("Presupuesto Límite Meta ($)", value=500000, step=25000, key="mc_costo_meta")
+
+    with c_sec3:
+        st.markdown("##### 📅 3. Metas & Calendario")
+        fecha_inicio = st.date_input("Fecha de Inicio", value=pd.to_datetime("today"), key="mc_f_inicio")
+        dias_meta = st.number_input("Días Meta (SLA Tiempo)", value=25, min_value=1, key="mc_dias_meta")
+        percentil_target = st.slider("Percentil de Compromiso (%)", 50, 99, 85, step=5, key="mc_target_perc")
+
+    # MUESTREO Y CONTROL
+    st.markdown("##### ⚙️ 4. Muestreo & Motor de Cálculo")
+    col_s1, col_s2 = st.columns([3, 1])
+    simulaciones = col_s1.slider("Número de Simulaciones (Iteraciones)", 500, 20000, 5000, step=500, key="mc_sims")
+    usar_semilla = col_s2.checkbox("Fijar Semilla (Reproducible)", value=True, key="mc_seed")
+
+    # VALIDACIÓN Y GENERACIÓN DE SIMULACIONES
+    valido = True
+    if tipo_dist in ["Triangular", "Beta-PERT"] and not (mc_opt <= mc_prob <= mc_pes):
+        st.error("Error: Se debe cumplir que Días Optimista ≤ Días Más Probable ≤ Días Pesimista.")
+        valido = False
+    elif tipo_dist == "Uniforme" and not (mc_min < mc_max):
+        st.error("Error: Se debe cumplir que Días Mínimos < Días Máximos.")
+        valido = False
+
+    if valido:
+        if usar_semilla:
+            np.random.seed(42)
+
+        # Generación aleatoria de duraciones según la distribución
+        if tipo_dist == "Triangular":
+            datos_dias = np.random.triangular(left=mc_opt, mode=mc_prob, right=mc_pes, size=simulaciones)
+        elif tipo_dist == "Beta-PERT":
+            # Parámetros Beta-PERT
+            a = 1 + 4 * (mc_prob - mc_opt) / (mc_pes - mc_opt) if (mc_pes > mc_opt) else 1
+            b = 1 + 4 * (mc_pes - mc_prob) / (mc_pes - mc_opt) if (mc_pes > mc_opt) else 1
+            datos_dias = mc_opt + np.random.beta(a, b, size=simulaciones) * (mc_pes - mc_opt)
+        elif tipo_dist == "Normal":
+            datos_dias = np.random.normal(loc=mc_mean, scale=mc_std, size=simulaciones)
+            datos_dias = np.clip(datos_dias, 1.0, None)  # Evitar días menores a 1
+        elif tipo_dist == "Uniforme":
+            datos_dias = np.random.uniform(low=mc_min, high=mc_max, size=simulaciones)
+
+        # Cálculo de costos por simulación
+        # Se agrega un margen de variabilidad aleatoria del 5% al costo diario por imprevistos
+        variabilidad_costo = np.random.normal(1.0, 0.05, size=simulaciones)
+        datos_costos = costo_fijo + (datos_dias * costo_diario * variabilidad_costo)
+
+        # CÁLCULO DE METRICAS PRINCIPALES
+        p50 = np.percentile(datos_dias, 50)
+        p_target = np.percentile(datos_dias, percentil_target)
+        p95 = np.percentile(datos_dias, 95)
+
+        p50_cost = np.percentile(datos_costos, 50)
+        p_target_cost = np.percentile(datos_costos, percentil_target)
+        p95_cost = np.percentile(datos_costos, 95)
+
+        exitos_tiempo = (datos_dias <= dias_meta).sum()
+        tasa_exito_tiempo = (exitos_tiempo / simulaciones) * 100
+        riesgo_retraso = 100 - tasa_exito_tiempo
+
+        exitos_costo = (datos_costos <= costo_meta).sum()
+        tasa_exito_costo = (exitos_costo / simulaciones) * 100
+
+        exitos_ambos = ((datos_dias <= dias_meta) & (datos_costos <= costo_meta)).sum()
+        tasa_exito_conjunta = (exitos_ambos / simulaciones) * 100
+
+        fecha_p50 = fecha_inicio + pd.Timedelta(days=int(np.round(p50)))
+        fecha_target = fecha_inicio + pd.Timedelta(days=int(np.round(p_target)))
+        fecha_p95 = fecha_inicio + pd.Timedelta(days=int(np.round(p95)))
 
         st.write("---")
-        
-        # Inspección "Pescar Iteración" & Proyección Anual
-        col_p1, col_p2 = st.columns(2)
+        st.markdown("#### 📊 Diagnóstico Ejecutivo & Veredicto de Viabilidad")
+
+        # Tarjeta dinámica de veredicto
+        if tasa_exito_conjunta >= 80:
+            v_color, v_title = "🟢", "PROYECTO ALTAMENTE VIABLE"
+            v_msg = f"Alta certidumbre: {tasa_exito_tiempo:.1f}% de éxito en plazo y {tasa_exito_costo:.1f}% en presupuesto."
+        elif tasa_exito_conjunta >= 50:
+            v_color, v_title = "🟡", "VIABLE CON RIESGO MODERADO"
+            v_msg = f"Factible pero ajustado: Se recomienda reservar una contingencia hasta el percentil P{percentil_target} ({p_target:.1f} días)."
+        else:
+            v_color, v_title = "🔴", "ALTO RIESGO DE INCUMPLIMIENTO"
+            v_msg = f"Incertidumbre elevada: El riesgo de retraso es del {riesgo_retraso:.1f}%. Ajusta la meta a {p_target:.0f} días o amplía el presupuesto."
+
+        st.info(f"### {v_color} {v_title}\n{v_msg}")
+
+        # Tarjetas de Métricas
+        m1, m2, m3, m4, m5 = st.columns(5)
+        m1.metric("🎯 Éxito en Tiempo", f"{tasa_exito_tiempo:.1f}%", f"Meta: {dias_meta}d")
+        m2.metric("⚠️ Riesgo de Retraso", f"{riesgo_retraso:.1f}%", f"Riesgo de Tiempo", delta_color="inverse")
+        m3.metric("💰 Éxito en Presupuesto", f"{tasa_exito_costo:.1f}%", f"Meta: ${costo_meta:,.0f}")
+        m4.metric(f"📆 Entrega P{percentil_target}", fecha_target.strftime("%d/%m/%Y"), f"{p_target:.1f} días")
+        m5.metric(f"💵 Presupuesto P{percentil_target}", f"${p_target_cost:,.0f}", f"P50: ${p50_cost:,.0f}")
+
+        st.write("---")
+
+        # GRÁFICOS INTERACTIVOS CON TABULADORES
+        st.markdown("#### 📈 Panel de Gráficos y Análisis de Distribución")
+        v_tab1, v_tab2, v_tab3 = st.tabs(["📊 Histograma (PDF)", "📈 Curva S Acumulada (CDF)", "💥 Dispersión Tiempo vs Costo"])
+
+        with v_tab1:
+            fig_hist = go.Figure()
+            fig_hist.add_trace(go.Histogram(
+                x=datos_dias,
+                nbinsx=40,
+                name="Simulaciones",
+                marker=dict(color=graph_bar, opacity=0.75, line=dict(color=heading_color, width=1)),
+                hovertemplate="Duración: %{x:.1f} días<br>Escenarios: %{y}<extra></extra>"
+            ))
+            fig_hist.add_vline(x=dias_meta, line_dash="dash", line_color="#ef4444", line_width=2,
+                               annotation_text=f"Meta ({dias_meta}d)", annotation_position="top left")
+            fig_hist.add_vline(x=p50, line_dash="dot", line_color="#f59e0b", line_width=2,
+                               annotation_text=f"P50 ({p50:.1f}d)", annotation_position="top right")
+            fig_hist.add_vline(x=p_target, line_dash="solid", line_color="#10b981", line_width=2.5,
+                               annotation_text=f"P{percentil_target} ({p_target:.1f}d)", annotation_position="top right")
+
+            fig_hist.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color=graph_text,
+                xaxis=dict(title="Días Estimados de Ejecución", gridcolor=grid_color),
+                yaxis=dict(title="Frecuencia (N° Muestras)", gridcolor=grid_color),
+                margin=dict(l=20, r=20, t=30, b=20), height=360, showlegend=False
+            )
+            st.plotly_chart(fig_hist, use_container_width=True)
+
+        with v_tab2:
+            # Curva S (CDF)
+            dias_sorted = np.sort(datos_dias)
+            prob_acumulada = np.arange(1, len(dias_sorted) + 1) / len(dias_sorted) * 100
+
+            fig_cdf = go.Figure()
+            fig_cdf.add_trace(go.Scatter(
+                x=dias_sorted, y=prob_acumulada, mode='lines',
+                line=dict(color=graph_bar, width=3),
+                hovertemplate="Días: %{x:.1f}<br>Probabilidad Cumplimiento: %{y:.1f}%<extra></extra>"
+            ))
+            fig_cdf.add_hline(y=percentil_target, line_dash="dash", line_color="#10b981",
+                              annotation_text=f"Objetivo {percentil_target}%", annotation_position="bottom right")
+            fig_cdf.add_vline(x=dias_meta, line_dash="dash", line_color="#ef4444",
+                              annotation_text=f"Meta ({dias_meta}d)", annotation_position="top left")
+
+            fig_cdf.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color=graph_text,
+                xaxis=dict(title="Días de Ejecución", gridcolor=grid_color),
+                yaxis=dict(title="Probabilidad Acumulada de Éxito (%)", gridcolor=grid_color, range=[0, 105]),
+                margin=dict(l=20, r=20, t=30, b=20), height=360, showlegend=False
+            )
+            st.plotly_chart(fig_cdf, use_container_width=True)
+
+        with v_tab3:
+            # Scatter Plot de Tiempo vs Costo
+            # Muestrear máximo 1000 puntos para rendimiento visual limpio
+            indices_sample = np.random.choice(simulaciones, size=min(1000, simulaciones), replace=False)
+            df_scatter = pd.DataFrame({
+                "Días": datos_dias[indices_sample],
+                "Costo": datos_costos[indices_sample]
+            })
+
+            fig_scatter = px.scatter(
+                df_scatter, x="Días", y="Costo",
+                color_discrete_sequence=[graph_bar],
+                opacity=0.6,
+                labels={"Días": "Duración (Días)", "Costo": "Costo Total ($)"}
+            )
+            fig_scatter.add_vline(x=dias_meta, line_dash="dash", line_color="#ef4444", annotation_text="Límite Tiempo")
+            fig_scatter.add_hline(y=costo_meta, line_dash="dash", line_color="#ef4444", annotation_text="Límite Costo")
+
+            fig_scatter.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color=graph_text,
+                xaxis=dict(gridcolor=grid_color), yaxis=dict(gridcolor=grid_color),
+                margin=dict(l=20, r=20, t=30, b=20), height=360
+            )
+            st.plotly_chart(fig_scatter, use_container_width=True)
+
+        st.write("---")
+
+        # INSPECCIÓN INDIVIDUAL (PESCAR ITERACIÓN) & ANÁLISIS DE EXTREMOS
+        col_p1, col_p2 = st.columns([1.2, 1])
 
         with col_p1:
             st.markdown("#### 🎣 Pescar e Inspeccionar Iteración")
             st.caption("Selecciona una iteración puntual para auditar cómo se comporta una muestra aleatoria específica.")
-            
+
             iter_idx = st.slider("Número de Iteración", 1, simulaciones, 100, key="mc_slider_iter")
-            val_iter = datos_sim[iter_idx - 1]
-            fecha_iter = fecha_inicio + pd.Timedelta(days=int(np.round(val_iter)))
-            
-            estado_iter = "🟢 Cumple Meta (A tiempo)" if val_iter <= dias_meta else "🔴 Sobrepasa Meta (Retrasado)"
-            
+            val_iter_dias = datos_dias[iter_idx - 1]
+            val_iter_costo = datos_costos[iter_idx - 1]
+            fecha_iter = fecha_inicio + pd.Timedelta(days=int(np.round(val_iter_dias)))
+
+            cumple_tiempo = val_iter_dias <= dias_meta
+            cumple_costo = val_iter_costo <= costo_meta
+
             st.markdown(f"""
-            * **Iteración Auditada:** **#{iter_idx}** de {simulaciones}
-            * **Duración Resultante:** **{val_iter:.1f} Días**
-            * **Fecha Proyectada de Término:** **{fecha_iter.strftime('%d/%m/%Y')}**
-            * **Resultado frente a la Meta:** {estado_iter}
+            * 📌 **Iteración Auditada:** **#{iter_idx}** de {simulaciones}
+            * ⏱️ **Duración Resultante:** **{val_iter_dias:.1f} Días**
+            * 💵 **Costo Estimado:** **${val_iter_costo:,.0f}**
+            * 📆 **Fecha Proyectada de Término:** **{fecha_iter.strftime('%d/%m/%Y')}**
+            * 🏁 **Resultado Tiempo:** {"🟢 Cumple Meta" if cumple_tiempo else "🔴 Retrasado"}
+            * 💳 **Resultado Presupuesto:** {"🟢 Dentro de Presupuesto" if cumple_costo else "🔴 Sobrecosto"}
             """)
 
         with col_p2:
-            st.markdown("#### 🚀 Proyección Anual (1 Año) y Beneficios")
-            st.caption("Capacidad operativa estimada para un horizonte continuo de 365 días.")
-            
-            ciclos_ano = 365 / p85 if p85 > 0 else 0
-            
+            st.markdown("#### 🚀 Proyección Anual (1 Año) y Capacidad")
+            dias_laborables_opcion = st.radio("Tipo de Calendario Anual", ["Días Hábiles (250 días/año)", "Días Corridos (365 días/año)"], horizontal=True, key="mc_cal_type")
+            dias_ano_base = 250 if "250" in dias_laborables_opcion else 365
+
+            ciclos_ano_p50 = dias_ano_base / p50 if p50 > 0 else 0
+            ciclos_ano_target = dias_ano_base / p_target if p_target > 0 else 0
+
             st.markdown(f"""
-            * 🔄 **Capacidad de Entregas al Año:** **{ciclos_ano:.1f} Proyectos / Ciclos completos** (calculado con la fecha de compromiso seguro P85).
-            * 🛡️ **Seguridad del Compromiso:** Con el estándar P85, tu margen de fallo operativo es de solo **15%**, superando el riesgo del 50% de las estimaciones tradicionales.
-            * 💡 **Beneficios Clave:**
-                1. Evita penalizaciones y sobrecostos por demoras.
-                2. Planificación precisa de la disponibilidad del equipo.
-                3. Comunicación transparente de plazos y fechas exactas a clientes.
+            * 🔄 **Capacidad Mediana (P50):** **{ciclos_ano_p50:.1f} Proyectos / Año**
+            * 🛡️ **Capacidad Segura (P{percentil_target}):** **{ciclos_ano_target:.1f} Proyectos / Año**
+            * 💡 **Margen de Seguridad:** Utilizar el percentil P{percentil_target} garantiza que el equipo cumplirá sus metas anuales con solo un **{100 - percentil_target}% de riesgo de imprevistos**.
             """)
+
+        st.write("---")
+
+        # TABLA DE CASOS EXTREMOS (TOP 5 MEJORES / PEORES)
+        st.markdown("#### 🔍 Tabla de Auditoría: Escenarios Extremos")
+        df_all_sims = pd.DataFrame({
+            "N° Iteración": np.arange(1, simulaciones + 1),
+            "Duración (Días)": np.round(datos_dias, 1),
+            "Costo Total ($)": np.round(datos_costos, 0),
+            "Cumple Tiempo": datos_dias <= dias_meta,
+            "Cumple Costo": datos_costos <= costo_meta
+        })
+
+        t_col1, t_col2 = st.columns(2)
+        with t_col1:
+            st.markdown("**Top 5 Escenarios Más Rápidos (Optimistas)**")
+            st.dataframe(df_all_sims.sort_values(by="Duración (Días)").head(5), use_container_width=True, hide_index=True)
+
+        with t_col2:
+            st.markdown("**Top 5 Escenarios Más Lentos (Pesimistas)**")
+            st.dataframe(df_all_sims.sort_values(by="Duración (Días)", ascending=False).head(5), use_container_width=True, hide_index=True)
 
         # DESCARGA INDIVIDUAL - TAB 4
         st.write("---")
@@ -1073,13 +1223,11 @@ with tab4:
         with c_dmc1:
             st.download_button(
                 label="📊 Descargar Simulación Monte Carlo en Excel (.xlsx)",
-                data=generar_excel_montecarlo(datos_sim),
+                data=generar_excel_montecarlo(datos_dias, datos_costos),
                 file_name=f"MonteCarlo_{st.session_state.nombre_proj.replace(' ', '_')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
-    else:
-        st.error("Asegúrate de que: Optimista ≤ Más Probable ≤ Pesimista.")
 
 # ------------------------------------------
 # TAB 5: FLUJOS
