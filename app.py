@@ -116,7 +116,7 @@ st.markdown(f"""
     }}
 
     /* Botones */
-    .stButton>button, .stFormSubmitButton>button {{
+    .stButton>button, .stFormSubmitButton>button, .stDownloadButton>button {{
         background-color: {btn_bg} !important;
         color: {text_color} !important;
         border: 1px solid {btn_border} !important;
@@ -124,7 +124,7 @@ st.markdown(f"""
         transition: 0.3s;
         font-weight: bold;
     }}
-    .stButton>button:hover, .stFormSubmitButton>button:hover {{
+    .stButton>button:hover, .stFormSubmitButton>button:hover, .stDownloadButton>button:hover {{
         background-color: {btn_hover} !important;
         border-color: {heading_color} !important;
         box-shadow: 0px 4px 10px rgba(0,0,0,0.2);
@@ -317,8 +317,129 @@ def clasificar_riesgo(sev):
         return "Crítico 🔴"
 
 # ==========================================
-# 3. FUNCIONES DE GENERACIÓN DE DOCUMENTOS
+# 3. FUNCIONES DE GENERACIÓN DE DOCUMENTOS INDIVIDUALES
 # ==========================================
+
+# 3.1 Requisitos Excel
+def generar_excel_requisitos():
+    output = io.BytesIO()
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Requisitos"
+    
+    ws.append(["Proyecto:", st.session_state.nombre_proj])
+    ws.append(["Objetivo:", st.session_state.objetivo_text])
+    ws.append([])
+    ws.append(["Código", "Tipo de Requisito", "Descripción"])
+    
+    for idx, rf in enumerate(st.session_state.rf_list, 1):
+        if rf.strip():
+            ws.append([f"RF-{idx:02d}", "Funcional", rf.strip()])
+            
+    for idx, rnf in enumerate(st.session_state.rnf_list, 1):
+        if rnf.strip():
+            ws.append([f"RNF-{idx:02d}", "No Funcional", rnf.strip()])
+            
+    wb.save(output)
+    return output.getvalue()
+
+# 3.2 Kanban Excel
+def generar_excel_kanban():
+    output = io.BytesIO()
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Tablero Kanban"
+    
+    ws.append(["Proyecto:", st.session_state.nombre_proj])
+    ws.append([])
+    ws.append(["N°", "Tarea", "Estado"])
+    
+    for idx, k in enumerate(st.session_state.kanban_tasks, 1):
+        ws.append([idx, k["Tarea"], k["Estado"]])
+        
+    wb.save(output)
+    return output.getvalue()
+
+# 3.3 Monte Carlo Excel
+def generar_excel_montecarlo(datos_sim):
+    output = io.BytesIO()
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Simulación Monte Carlo"
+    
+    opt = st.session_state.get("mc_opt", 10)
+    prob = st.session_state.get("mc_prob", 20)
+    pes = st.session_state.get("mc_pes", 45)
+    
+    p50 = np.percentile(datos_sim, 50)
+    p85 = np.percentile(datos_sim, 85)
+    p95 = np.percentile(datos_sim, 95)
+    
+    ws.append(["Proyecto:", st.session_state.nombre_proj])
+    ws.append(["Días Optimista:", opt])
+    ws.append(["Días Más Probable:", prob])
+    ws.append(["Días Pesimista:", pes])
+    ws.append(["Número Muestras:", len(datos_sim)])
+    ws.append([])
+    ws.append(["Métrica / Percentil", "Duración Estimada (Días)"])
+    ws.append(["Percentil 50 (P50 - Mediana)", round(p50, 2)])
+    ws.append(["Percentil 85 (P85 - Recomendado)", round(p85, 2)])
+    ws.append(["Percentil 95 (P95 - Pesimista)", round(p95, 2)])
+    
+    wb.save(output)
+    return output.getvalue()
+
+# 3.4 EDT Excel
+def generar_excel_edt():
+    output = io.BytesIO()
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "EDT WBS"
+    
+    ws.append(["Proyecto:", st.session_state.nombre_proj])
+    ws.append([])
+    ws.append(["Fase Principal", "Subfase / Grupo", "Paquete de Trabajo", "Horas Estimadas", "Costo Estimado ($)", "Documentos / Referencias"])
+    
+    for item in st.session_state.edt_list:
+        ws.append([
+            item.get("Fase", ""),
+            item.get("Subfase", ""),
+            item.get("Paquete", ""),
+            item.get("Horas", 0),
+            item.get("Costo", 0),
+            item.get("Documentos", "")
+        ])
+        
+    wb.save(output)
+    return output.getvalue()
+
+# 3.5 Riesgos Excel
+def generar_excel_riesgos():
+    output = io.BytesIO()
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Matriz de Riesgos"
+    
+    ws.append(["Proyecto:", st.session_state.nombre_proj])
+    ws.append([])
+    ws.append(["Riesgo", "Probabilidad (1-5)", "Impacto (1-5)", "Severidad (P x I)", "Nivel de Riesgo"])
+    
+    for r_item in st.session_state.riesgos_list:
+        prob_v = r_item.get("Probabilidad", 1)
+        imp_v = r_item.get("Impacto", 1)
+        sev = prob_v * imp_v
+        ws.append([
+            r_item.get("Riesgo", ""),
+            prob_v,
+            imp_v,
+            sev,
+            clasificar_riesgo(sev)
+        ])
+        
+    wb.save(output)
+    return output.getvalue()
+
+# 3.6 Informes Word
 def generar_word_ers():
     doc = Document()
     doc.add_heading(f"Especificación de Requisitos: {st.session_state.nombre_proj}", level=1)
@@ -674,6 +795,27 @@ with tab1:
             st.session_state.rnf_list.pop(rnf_to_delete)
             st.rerun()
 
+    # DESCARGA INDIVIDUAL - TAB 1
+    st.write("---")
+    st.markdown("#### 📥 Exportar Punto 1: Requisitos")
+    c_dl1, c_dl2 = st.columns(2)
+    with c_dl1:
+        st.download_button(
+            label="📊 Descargar Requisitos en Excel (.xlsx)",
+            data=generar_excel_requisitos(),
+            file_name=f"Requisitos_{st.session_state.nombre_proj.replace(' ', '_')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+    with c_dl2:
+        st.download_button(
+            label="📄 Descargar Documento ERS en Word (.docx)",
+            data=generar_word_ers(),
+            file_name=f"ERS_Requisitos_{st.session_state.nombre_proj.replace(' ', '_')}.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            use_container_width=True
+        )
+
 # ------------------------------------------
 # TAB 2: MODELADO
 # ------------------------------------------
@@ -686,6 +828,19 @@ with tab2:
     
     codigo_mermaid = st.text_area("Sintaxis Mermaid", value=default_mermaid, height=120)
     st_mermaid(codigo_mermaid)
+
+    # DESCARGA INDIVIDUAL - TAB 2
+    st.write("---")
+    st.markdown("#### 📥 Exportar Punto 2: Diagrama de Modelado")
+    col_d2_1, col_d2_2 = st.columns([1, 1])
+    with col_d2_1:
+        st.download_button(
+            label="📌 Descargar Código Diagrama Mermaid (.mmd)",
+            data=codigo_mermaid.encode('utf-8'),
+            file_name=f"Diagrama_Modelado_{st.session_state.nombre_proj.replace(' ', '_')}.mmd",
+            mime="text/plain",
+            use_container_width=True
+        )
 
 # ------------------------------------------
 # TAB 3: GESTIÓN
@@ -731,6 +886,28 @@ with tab3:
             st.session_state.kanban_tasks.pop(task_to_delete)
             st.rerun()
 
+    # DESCARGA INDIVIDUAL - TAB 3
+    st.write("---")
+    st.markdown("#### 📥 Exportar Punto 3: Tablero Kanban")
+    c_dk1, c_dk2 = st.columns(2)
+    with c_dk1:
+        st.download_button(
+            label="📊 Descargar Tablero Kanban en Excel (.xlsx)",
+            data=generar_excel_kanban(),
+            file_name=f"Kanban_{st.session_state.nombre_proj.replace(' ', '_')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+    with c_dk2:
+        df_k_exp = pd.DataFrame(st.session_state.kanban_tasks)
+        st.download_button(
+            label="📄 Descargar Tareas en CSV (.csv)",
+            data=df_k_exp.to_csv(index=False).encode('utf-8'),
+            file_name=f"Kanban_{st.session_state.nombre_proj.replace(' ', '_')}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+
 # ------------------------------------------
 # TAB 4: MONTE CARLO
 # ------------------------------------------
@@ -753,6 +930,19 @@ with tab4:
         p85 = np.percentile(datos_sim, 85)
         st.session_state.p85_val = p85
         st.metric("Estimación con 85% de Confianza", f"{p85:.1f} Días")
+
+        # DESCARGA INDIVIDUAL - TAB 4
+        st.write("---")
+        st.markdown("#### 📥 Exportar Punto 4: Resultados Monte Carlo")
+        c_dmc1, _ = st.columns([1, 1])
+        with c_dmc1:
+            st.download_button(
+                label="📊 Descargar Simulación Monte Carlo en Excel (.xlsx)",
+                data=generar_excel_montecarlo(datos_sim),
+                file_name=f"MonteCarlo_{st.session_state.nombre_proj.replace(' ', '_')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
     else:
         st.error("Asegúrate de que: Optimista ≤ Más Probable ≤ Pesimista.")
 
@@ -779,6 +969,19 @@ with tab5:
     
     st.markdown("#### Vista Previa del Diagrama")
     st_mermaid(st.session_state.flujo_codigo)
+
+    # DESCARGA INDIVIDUAL - TAB 5
+    st.write("---")
+    st.markdown("#### 📥 Exportar Punto 5: Diagrama de Flujos")
+    c_df1, _ = st.columns([1, 1])
+    with c_df1:
+        st.download_button(
+            label="📌 Descargar Diagrama de Flujo (.mmd)",
+            data=st.session_state.flujo_codigo.encode('utf-8'),
+            file_name=f"Flujo_Secuencia_{st.session_state.nombre_proj.replace(' ', '_')}.mmd",
+            mime="text/plain",
+            use_container_width=True
+        )
 
 # ------------------------------------------
 # TAB 6: EDT (WBS) - MULTINIVEL & MINIMALISTA
@@ -924,6 +1127,28 @@ with tab6:
             st.session_state.edt_list.pop(edt_del_idx)
             st.rerun()
 
+    # DESCARGA INDIVIDUAL - TAB 6
+    st.write("---")
+    st.markdown("#### 📥 Exportar Punto 6: Estructura EDT (WBS)")
+    c_dedt1, c_dedt2 = st.columns(2)
+    with c_dedt1:
+        st.download_button(
+            label="📊 Descargar EDT en Excel (.xlsx)",
+            data=generar_excel_edt(),
+            file_name=f"EDT_{st.session_state.nombre_proj.replace(' ', '_')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+    with c_dedt2:
+        df_e_exp = pd.DataFrame(st.session_state.edt_list)
+        st.download_button(
+            label="📄 Descargar EDT en CSV (.csv)",
+            data=df_e_exp.to_csv(index=False).encode('utf-8'),
+            file_name=f"EDT_{st.session_state.nombre_proj.replace(' ', '_')}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+
 # ------------------------------------------
 # TAB 7: RIESGOS
 # ------------------------------------------
@@ -1066,6 +1291,19 @@ with tab7:
         if r_del_idx is not None:
             st.session_state.riesgos_list.pop(r_del_idx)
             st.rerun()
+
+    # DESCARGA INDIVIDUAL - TAB 7
+    st.write("---")
+    st.markdown("#### 📥 Exportar Punto 7: Matriz de Riesgos")
+    c_dr1, _ = st.columns([1, 1])
+    with c_dr1:
+        st.download_button(
+            label="📊 Descargar Matriz de Riesgos en Excel (.xlsx)",
+            data=generar_excel_riesgos(),
+            file_name=f"Matriz_Riesgos_{st.session_state.nombre_proj.replace(' ', '_')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
 
 # ------------------------------------------
 # TAB 8: REPORTE MEMENTOMORI
