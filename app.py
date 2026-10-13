@@ -8,6 +8,10 @@ import io
 import zipfile
 import openpyxl
 
+# Librerías de Estilos para Excel
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
+
 # Librerías para Word
 from docx import Document
 from docx.shared import Pt, RGBColor
@@ -326,6 +330,7 @@ def generar_excel_requisitos():
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Requisitos"
+    ws.views.sheetView[0].showGridLines = True
     
     ws.append(["Proyecto:", st.session_state.nombre_proj])
     ws.append(["Objetivo:", st.session_state.objetivo_text])
@@ -339,6 +344,11 @@ def generar_excel_requisitos():
     for idx, rnf in enumerate(st.session_state.rnf_list, 1):
         if rnf.strip():
             ws.append([f"RNF-{idx:02d}", "No Funcional", rnf.strip()])
+
+    for col in ws.columns:
+        max_len = max(len(str(cell.value or '')) for cell in col)
+        col_letter = get_column_letter(col[0].column)
+        ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
             
     wb.save(output)
     return output.getvalue()
@@ -349,6 +359,7 @@ def generar_excel_kanban():
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Tablero Kanban"
+    ws.views.sheetView[0].showGridLines = True
     
     ws.append(["Proyecto:", st.session_state.nombre_proj])
     ws.append([])
@@ -356,58 +367,239 @@ def generar_excel_kanban():
     
     for idx, k in enumerate(st.session_state.kanban_tasks, 1):
         ws.append([idx, k["Tarea"], k["Estado"]])
+
+    for col in ws.columns:
+        max_len = max(len(str(cell.value or '')) for cell in col)
+        col_letter = get_column_letter(col[0].column)
+        ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
         
     wb.save(output)
     return output.getvalue()
 
-# 3.3 Monte Carlo Excel
+# 3.3 MONTE CARLO EXCEL ALTAMENTE ESTILIZADO Y DINÁMICO
 def generar_excel_montecarlo(datos_dias, datos_costos=None):
     output = io.BytesIO()
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Simulación Monte Carlo"
+    ws.views.sheetView[0].showGridLines = True
+
+    # 🎨 ESTILOS DE CORTE EJECUTIVO / MINIMALISTA
+    HEADER_MAIN_FILL = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid")  # Azul Marino
+    SUBHEADER_FILL = PatternFill(start_color="2563EB", end_color="2563EB", fill_type="solid")   # Azul Acento
+    ACCENT_BG_FILL = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")   # Gris ultra claro
+    ZEBRA_FILL = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")       # Gris alternado
     
+    SUCCESS_FILL = PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid")     # Verde suave
+    WARNING_FILL = PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid")     # Rojo suave
+
+    FONT_TITLE = Font(name="Calibri", size=14, bold=True, color="FFFFFF")
+    FONT_HEADER = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    FONT_BOLD = Font(name="Calibri", size=11, bold=True, color="0F172A")
+    FONT_REGULAR = Font(name="Calibri", size=11, color="334155")
+
+    ALIGN_LEFT = Alignment(horizontal="left", vertical="center")
+    ALIGN_RIGHT = Alignment(horizontal="right", vertical="center")
+    ALIGN_CENTER = Alignment(horizontal="center", vertical="center")
+
+    THIN_BORDER = Border(
+        left=Side(style='thin', color='E2E8F0'),
+        right=Side(style='thin', color='E2E8F0'),
+        top=Side(style='thin', color='E2E8F0'),
+        bottom=Side(style='thin', color='E2E8F0')
+    )
+
+    # 1. TÍTULO Y LOGO/BANNER
+    ws.merge_cells("A1:C1")
+    title_cell = ws["A1"]
+    title_cell.value = f"📊 REPORTE DE SIMULACIÓN MONTE CARLO: {st.session_state.nombre_proj.upper()}"
+    title_cell.font = FONT_TITLE
+    title_cell.fill = HEADER_MAIN_FILL
+    title_cell.alignment = ALIGN_CENTER
+    ws.row_dimensions[1].height = 35
+
+    # 2. PARÁMETROS CONFIGURADOS
     dist_name = st.session_state.get("mc_dist_type", "Triangular")
     dias_meta = st.session_state.get("mc_dias_meta", 25)
     costo_meta = st.session_state.get("mc_costo_meta", 500000)
     percentil_target = st.session_state.get("mc_target_perc", 85)
-    
+
+    params = [
+        ("Proyecto:", st.session_state.nombre_proj),
+        ("Modelo de Distribución Usado:", dist_name),
+        ("Días Meta (SLA Tiempo):", dias_meta),
+        ("Presupuesto Meta (SLA Costo):", costo_meta),
+        ("Muestras Simuladas (Iteraciones):", len(datos_dias))
+    ]
+
+    ws.cell(row=3, column=1, value="PARÁMETROS DEL PROYECTO Y CONFIGURACIÓN").font = FONT_BOLD
+    ws.merge_cells("A3:C3")
+    ws.row_dimensions[3].height = 22
+
+    r = 4
+    for label, val in params:
+        c1 = ws.cell(row=r, column=1, value=label)
+        c2 = ws.cell(row=r, column=2, value=val)
+        c3 = ws.cell(row=r, column=3, value="")
+
+        c1.font = FONT_BOLD
+        c2.font = FONT_REGULAR
+        c1.fill = ACCENT_BG_FILL
+        
+        c1.border = THIN_BORDER
+        c2.border = THIN_BORDER
+        c3.border = THIN_BORDER
+
+        if isinstance(val, (int, float)):
+            if "Presupuesto" in label:
+                c2.number_format = "$#,##0"
+            else:
+                c2.number_format = "#,##0"
+            c2.alignment = ALIGN_RIGHT
+        else:
+            c2.alignment = ALIGN_LEFT
+
+        ws.row_dimensions[r].height = 20
+        r += 1
+
+    # 3. SECCIÓN 1: MÉTRICAS DE TIEMPO
+    r += 1
+    ws.cell(row=r, column=1, value="Métrica de Tiempo / SLA").font = FONT_HEADER
+    ws.cell(row=r, column=1).fill = SUBHEADER_FILL
+    ws.cell(row=r, column=2, value="Valor Estimado").font = FONT_HEADER
+    ws.cell(row=r, column=2).fill = SUBHEADER_FILL
+    ws.cell(row=r, column=3, value="Unidad / Formato").font = FONT_HEADER
+    ws.cell(row=r, column=3).fill = SUBHEADER_FILL
+    ws.row_dimensions[r].height = 25
+    r += 1
+
     p50_dias = np.percentile(datos_dias, 50)
     p_target_dias = np.percentile(datos_dias, percentil_target)
     p95_dias = np.percentile(datos_dias, 95)
-    
+
     exitos_dias = (datos_dias <= dias_meta).sum()
-    tasa_exito_dias = (exitos_dias / len(datos_dias)) * 100
-    riesgo_retraso = 100 - tasa_exito_dias
-    
-    ws.append(["Proyecto:", st.session_state.nombre_proj])
-    ws.append(["Modelo de Distribución Usado:", dist_name])
-    ws.append(["Días Meta (SLA Tiempo):", dias_meta])
-    ws.append(["Presupuesto Meta (SLA Costo):", costo_meta])
-    ws.append(["Número Muestras:", len(datos_dias)])
-    ws.append([])
-    ws.append(["Métrica de Tiempo", "Valor (Días)"])
-    ws.append(["Percentil 50 (P50 - Mediana)", round(p50_dias, 2)])
-    ws.append([f"Percentil Objetivo (P{percentil_target})", round(p_target_dias, 2)])
-    ws.append(["Percentil 95 (P95 - Pesimista)", round(p95_dias, 2)])
-    ws.append(["Tasa de Éxito en Tiempo (%)", f"{round(tasa_exito_dias, 1)}%"])
-    ws.append(["Riesgo de Retraso (%)", f"{round(riesgo_retraso, 1)}%"])
-    ws.append(["Capacidad Anual Proyectada (Proyectos/Año)", round(365 / p_target_dias, 1) if p_target_dias > 0 else 0])
-    
+    tasa_exito_dias = (exitos_dias / len(datos_dias))
+    riesgo_retraso = 1.0 - tasa_exito_dias
+    capacidad_anual = (365 / p_target_dias) if p_target_dias > 0 else 0
+
+    time_metrics = [
+        ("Percentil 50 (P50 - Mediana Esperada)", p50_dias, "Días", "0.0"),
+        (f"Percentil Objetivo (P{percentil_target} - Compromiso Seguros)", p_target_dias, "Días", "0.0"),
+        ("Percentil 95 (P95 - Escenario Pesimista)", p95_dias, "Días", "0.0"),
+        ("Tasa de Éxito en Tiempo", tasa_exito_dias, "Porcentaje", "0.0%"),
+        ("Riesgo de Retraso", riesgo_retraso, "Porcentaje", "0.0%"),
+        ("Capacidad Anual Proyectada", capacidad_anual, "Proyectos / Año", "0.0")
+    ]
+
+    for idx, (label, val, unit, num_fmt) in enumerate(time_metrics):
+        c1 = ws.cell(row=r, column=1, value=label)
+        c2 = ws.cell(row=r, column=2, value=val)
+        c3 = ws.cell(row=r, column=3, value=unit)
+
+        c1.font = FONT_REGULAR
+        c2.font = FONT_BOLD if ("Objetivo" in label or "Éxito" in label) else FONT_REGULAR
+        c3.font = FONT_REGULAR
+
+        c1.border = THIN_BORDER
+        c2.border = THIN_BORDER
+        c3.border = THIN_BORDER
+
+        c2.number_format = num_fmt
+        c2.alignment = ALIGN_RIGHT
+        c3.alignment = ALIGN_CENTER
+
+        if idx % 2 == 1:
+            c1.fill = ZEBRA_FILL
+            c2.fill = ZEBRA_FILL
+            c3.fill = ZEBRA_FILL
+
+        if "Tasa de Éxito" in label:
+            if tasa_exito_dias >= 0.8:
+                c2.fill = SUCCESS_FILL
+            elif tasa_exito_dias < 0.5:
+                c2.fill = WARNING_FILL
+        elif "Riesgo de Retraso" in label:
+            if riesgo_retraso >= 0.5:
+                c2.fill = WARNING_FILL
+
+        ws.row_dimensions[r].height = 20
+        r += 1
+
+    # 4. SECCIÓN 2: MÉTRICAS FINANCIERAS / COSTOS
     if datos_costos is not None:
+        r += 1
+        ws.cell(row=r, column=1, value="Métrica Financiera / Costos").font = FONT_HEADER
+        ws.cell(row=r, column=1).fill = SUBHEADER_FILL
+        ws.cell(row=r, column=2, value="Valor Estimado ($)").font = FONT_HEADER
+        ws.cell(row=r, column=2).fill = SUBHEADER_FILL
+        ws.cell(row=r, column=3, value="Unidad / Formato").font = FONT_HEADER
+        ws.cell(row=r, column=3).fill = SUBHEADER_FILL
+        ws.row_dimensions[r].height = 25
+        r += 1
+
         p50_cost = np.percentile(datos_costos, 50)
         p_target_cost = np.percentile(datos_costos, percentil_target)
         p95_cost = np.percentile(datos_costos, 95)
         exitos_cost = (datos_costos <= costo_meta).sum()
-        tasa_exito_cost = (exitos_cost / len(datos_costos)) * 100
-        
-        ws.append([])
-        ws.append(["Métrica de Costo Financiero", "Valor ($)"])
-        ws.append(["Costo Mediano (P50)", round(p50_cost, 2)])
-        ws.append([f"Costo Recomendado (P{percentil_target})", round(p_target_cost, 2)])
-        ws.append(["Costo Pesimista (P95)", round(p95_cost, 2)])
-        ws.append(["Tasa de Éxito Presupuestario (%)", f"{round(tasa_exito_cost, 1)}%"])
-    
+        tasa_exito_cost = (exitos_cost / len(datos_costos))
+
+        cost_metrics = [
+            ("Costo Mediano (P50)", p50_cost, "Moneda ($)", "$#,##0"),
+            (f"Costo Recomendado (P{percentil_target})", p_target_cost, "Moneda ($)", "$#,##0"),
+            ("Costo Pesimista (P95)", p95_cost, "Moneda ($)", "$#,##0"),
+            ("Tasa de Éxito Presupuestario", tasa_exito_cost, "Porcentaje", "0.0%")
+        ]
+
+        for idx, (label, val, unit, num_fmt) in enumerate(cost_metrics):
+            c1 = ws.cell(row=r, column=1, value=label)
+            c2 = ws.cell(row=r, column=2, value=val)
+            c3 = ws.cell(row=r, column=3, value=unit)
+
+            c1.font = FONT_REGULAR
+            c2.font = FONT_BOLD if ("Recomendado" in label or "Éxito" in label) else FONT_REGULAR
+            c3.font = FONT_REGULAR
+
+            c1.border = THIN_BORDER
+            c2.border = THIN_BORDER
+            c3.border = THIN_BORDER
+
+            c2.number_format = num_fmt
+            c2.alignment = ALIGN_RIGHT
+            c3.alignment = ALIGN_CENTER
+
+            if idx % 2 == 1:
+                c1.fill = ZEBRA_FILL
+                c2.fill = ZEBRA_FILL
+                c3.fill = ZEBRA_FILL
+
+            if "Tasa de Éxito" in label:
+                if tasa_exito_cost >= 0.8:
+                    c2.fill = SUCCESS_FILL
+                elif tasa_exito_cost < 0.5:
+                    c2.fill = WARNING_FILL
+
+            ws.row_dimensions[r].height = 20
+            r += 1
+
+    # 5. AJUSTE DINÁMICO DE ANCHO DE COLUMNAS (AUTO-FIT PERFECTO)
+    for col in ws.columns:
+        max_len = 0
+        col_letter = get_column_letter(col[0].column)
+        for cell in col:
+            if cell.row == 1:  # Ignorar celda de título unificada
+                continue
+            if cell.value is not None:
+                # Si es un número formateado como moneda o porcentaje, estimar largo visual
+                val_str = str(cell.value)
+                if isinstance(cell.value, float) and "0.0%" in (cell.number_format or ""):
+                    val_str = f"{cell.value * 100:.1f}%"
+                elif isinstance(cell.value, (int, float)) and "$#" in (cell.number_format or ""):
+                    val_str = f"${cell.value:,.0f}"
+                
+                if len(val_str) > max_len:
+                    max_len = len(val_str)
+        ws.column_dimensions[col_letter].width = max(max_len + 6, 16)
+
     wb.save(output)
     return output.getvalue()
 
@@ -417,6 +609,7 @@ def generar_excel_edt():
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "EDT WBS"
+    ws.views.sheetView[0].showGridLines = True
     
     ws.append(["Proyecto:", st.session_state.nombre_proj])
     ws.append([])
@@ -431,6 +624,11 @@ def generar_excel_edt():
             item.get("Costo", 0),
             item.get("Documentos", "")
         ])
+
+    for col in ws.columns:
+        max_len = max(len(str(cell.value or '')) for cell in col)
+        col_letter = get_column_letter(col[0].column)
+        ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
         
     wb.save(output)
     return output.getvalue()
@@ -441,6 +639,7 @@ def generar_excel_riesgos():
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Matriz de Riesgos"
+    ws.views.sheetView[0].showGridLines = True
     
     ws.append(["Proyecto:", st.session_state.nombre_proj])
     ws.append([])
@@ -457,6 +656,11 @@ def generar_excel_riesgos():
             sev,
             clasificar_riesgo(sev)
         ])
+
+    for col in ws.columns:
+        max_len = max(len(str(cell.value or '')) for cell in col)
+        col_letter = get_column_letter(col[0].column)
+        ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
         
     wb.save(output)
     return output.getvalue()
@@ -678,6 +882,7 @@ def generar_excel_estilizado():
     # Hoja 1: Requisitos
     ws1 = wb.active
     ws1.title = "Requisitos"
+    ws1.views.sheetView[0].showGridLines = True
     ws1.append(["Código", "Tipo", "Descripción"])
     for idx, rf in enumerate(st.session_state.rf_list, 1):
         if rf.strip():
@@ -688,12 +893,14 @@ def generar_excel_estilizado():
 
     # Hoja 2: Kanban
     ws2 = wb.create_sheet(title="Kanban")
+    ws2.views.sheetView[0].showGridLines = True
     ws2.append(["Tarea", "Estado"])
     for k in st.session_state.kanban_tasks:
         ws2.append([k["Tarea"], k["Estado"]])
 
     # Hoja 3: EDT (WBS Ampliada)
     ws3 = wb.create_sheet(title="EDT (WBS)")
+    ws3.views.sheetView[0].showGridLines = True
     ws3.append(["Fase Principal", "Subfase / Grupo", "Paquete de Trabajo", "Horas Estimadas", "Costo Estimado", "Documentos / Adjuntos"])
     for e in st.session_state.edt_list:
         ws3.append([
@@ -704,6 +911,12 @@ def generar_excel_estilizado():
             e.get("Costo", 0),
             e.get("Documentos", "")
         ])
+
+    for sheet in wb.worksheets:
+        for col in sheet.columns:
+            max_len = max(len(str(cell.value or '')) for cell in col)
+            col_letter = get_column_letter(col[0].column)
+            sheet.column_dimensions[col_letter].width = max(max_len + 4, 12)
 
     wb.save(output)
     return output.getvalue()
