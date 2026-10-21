@@ -1,4 +1,5 @@
 import io
+import json
 import zipfile
 from datetime import date
 
@@ -21,7 +22,7 @@ from docx.shared import Pt, RGBColor
 # 1. CONFIGURACIÓN GENERAL
 # =====================================================================
 st.set_page_config(page_title="MatrixDev · Tesis", layout="wide", page_icon="🍷",
-                   initial_sidebar_state="expanded")
+                   initial_sidebar_state="collapsed")
 
 
 def _version_streamlit():
@@ -36,29 +37,62 @@ ANCHO = {"width": "stretch"} if _version_streamlit() >= (1, 50) else {"use_conta
 
 # ---------------------------------------------------------------------
 # Paletas de color por tema
+#   claro       → celeste y blanco
+#   oscuro      → negro y blanco
+#   informatico → negro con rojo neón
 # ---------------------------------------------------------------------
 TEMAS = {
     "claro": {
-        "nombre": "Claro", "bg": "#f5f6f8", "card": "#ffffff", "text": "#151a22", "sub": "#5b6472",
-        "accent": "#2453d6", "accent2": "#7c3aed", "border": "#e0e4ea", "grid": "#eceff3",
-        "input": "#ffffff", "ok": "#15955a", "warn": "#d48806", "bad": "#d1453b",
+        "nombre": "Claro", "base": "light", "icono": "☀️", "bg": "#f2f9fe", "card": "#ffffff", "text": "#0b2a3f", "sub": "#56768c",
+        "accent": "#0ea5e9", "accent2": "#0369a1", "border": "#d3e9f6", "grid": "#e5f2fa",
+        "input": "#ffffff", "ok": "#10b981", "warn": "#f59e0b", "bad": "#ef4444", "on_accent": "#ffffff",
+        "fuente": "'Plus Jakarta Sans', 'Segoe UI', Helvetica, Arial, sans-serif", "neon": False,
+        "fondo": "radial-gradient(1200px 500px at 85% -10%, rgba(14,165,233,0.14), transparent 60%), "
+                 "radial-gradient(900px 400px at -10% 10%, rgba(56,189,248,0.10), transparent 60%)",
     },
     "oscuro": {
-        "nombre": "Gris oscuro", "bg": "#141518", "card": "#1c1e23", "text": "#eceef1", "sub": "#9aa1ad",
-        "accent": "#5aa9ff", "accent2": "#b794f6", "border": "#2c2f36", "grid": "#26292f",
-        "input": "#23262c", "ok": "#3ccf8e", "warn": "#f2b33d", "bad": "#ff6b5e",
+        "nombre": "Oscuro", "base": "dark", "icono": "🌙", "bg": "#000000", "card": "#0b0b0b", "text": "#ffffff", "sub": "#a1a1a1",
+        "accent": "#ffffff", "accent2": "#bdbdbd", "border": "#262626", "grid": "#191919",
+        "input": "#121212", "ok": "#4ade80", "warn": "#facc15", "bad": "#f87171", "on_accent": "#000000",
+        "fuente": "'Plus Jakarta Sans', 'Segoe UI', Helvetica, Arial, sans-serif", "neon": False,
+        "fondo": "radial-gradient(1000px 420px at 80% -10%, rgba(255,255,255,0.06), transparent 60%)",
     },
-    "vino": {
-        "nombre": "Vino tinto", "bg": "#22090f", "card": "#2f1018", "text": "#f6eaec", "sub": "#c4a5ab",
-        "accent": "#eba2ab", "accent2": "#f3c98b", "border": "#4b1c27", "grid": "#3b1620",
-        "input": "#3a1520", "ok": "#7fd1a0", "warn": "#f0c06a", "bad": "#ff7f7f",
+    "informatico": {
+        "nombre": "Informático", "base": "dark", "icono": "💻", "bg": "#050505", "card": "#0d090a", "text": "#f5f5f5", "sub": "#a08f92",
+        "accent": "#ff1f4b", "accent2": "#ff6b86", "border": "#3a0d17", "grid": "#1c0a0f",
+        "input": "#110a0c", "ok": "#2bff88", "warn": "#ffb020", "bad": "#ff3b3b", "on_accent": "#050505",
+        "fuente": "'JetBrains Mono', 'Fira Code', Consolas, monospace", "neon": True,
+        "fondo": "linear-gradient(rgba(255,31,75,0.045) 1px, transparent 1px) 0 0 / 32px 32px, "
+                 "linear-gradient(90deg, rgba(255,31,75,0.045) 1px, transparent 1px) 0 0 / 32px 32px, "
+                 "radial-gradient(900px 420px at 85% -10%, rgba(255,31,75,0.16), transparent 60%)",
     },
 }
 
-if "tema" not in st.session_state:
+if st.session_state.get("tema") not in TEMAS:
     st.session_state.tema = "claro"
-T = TEMAS.get(st.session_state.tema, TEMAS["claro"])
-FUENTE = "'IBM Plex Sans', 'Segoe UI', Helvetica, Arial, sans-serif"
+T = TEMAS[st.session_state.tema]
+FUENTE = T["fuente"]
+
+
+def aplicar_tema_nativo(tema):
+    """Sincroniza el tema nativo de Streamlit (sliders, toggles, tablas, calendarios) con el tema elegido."""
+    try:
+        from streamlit import config as _cfg
+        opciones = {
+            "theme.base": "light" if tema["base"] == "light" else "dark",
+            "theme.primaryColor": tema["accent"],
+            "theme.backgroundColor": tema["bg"],
+            "theme.secondaryBackgroundColor": tema["input"],
+            "theme.textColor": tema["text"],
+        }
+        cambio = False
+        for clave, valor in opciones.items():
+            if _cfg.get_option(clave) != valor:
+                _cfg.set_option(clave, valor)
+                cambio = True
+        return cambio
+    except Exception:
+        return False  # versiones antiguas: el CSS de abajo cubre lo esencial
 
 
 def rgba(hex_color, alpha):
@@ -67,127 +101,247 @@ def rgba(hex_color, alpha):
     return f"rgba({r},{g},{b},{alpha})"
 
 
+# Si el tema nativo cambió, se recarga una vez para que Streamlit lo aplique de inmediato
+if aplicar_tema_nativo(T) and st.session_state.get("_tema_sincronizado") != st.session_state.tema:
+    st.session_state._tema_sincronizado = st.session_state.tema
+    st.rerun()
+st.session_state._tema_sincronizado = st.session_state.tema
+
+
+def cambiar_tema(nuevo):
+    st.session_state.tema = nuevo
+
+
+# Efectos de brillo solo para el tema informático
+GLOW = f"0 0 18px {rgba(T['accent'], 0.45)}, 0 0 2px {rgba(T['accent'], 0.9)}" if T["neon"] else f"0 10px 28px {rgba(T['accent'], 0.16)}"
+GLOW_TXT = f"0 0 10px {rgba(T['accent'], 0.75)}, 0 0 24px {rgba(T['accent'], 0.35)}" if T["neon"] else "none"
+SOMBRA = f"0 1px 2px {rgba('#000000', 0.04)}, 0 4px 16px {rgba(T['accent'], 0.06)}" if st.session_state.tema == "claro" else "none"
+
 # ---------------------------------------------------------------------
 # CSS global
 # ---------------------------------------------------------------------
 st.markdown(f"""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
-.stApp {{ background-color: {T['bg']} !important; color: {T['text']} !important; font-family: {FUENTE}; }}
+/* ---------- Animaciones ---------- */
+@keyframes mdFadeUp {{ from {{ opacity: 0; transform: translateY(10px); }} to {{ opacity: 1; transform: none; }} }}
+@keyframes mdFade {{ from {{ opacity: 0; }} to {{ opacity: 1; }} }}
+@keyframes mdPop {{ 0% {{ opacity: 0; transform: scale(0.2); }} 70% {{ transform: scale(1.15); }} 100% {{ opacity: 1; transform: scale(1); }} }}
+@keyframes mdSlide {{ from {{ background-position: 0% 50%; }} to {{ background-position: 200% 50%; }} }}
+@keyframes mdPulse {{ 0%, 100% {{ box-shadow: 0 0 0 0 {rgba(T['accent'], 0.45)}; }} 50% {{ box-shadow: 0 0 0 7px {rgba(T['accent'], 0)}; }} }}
+@keyframes mdBlink {{ 0%, 49% {{ opacity: 1; }} 50%, 100% {{ opacity: 0; }} }}
+@keyframes mdFlicker {{ 0%, 100% {{ opacity: 1; }} 92% {{ opacity: 1; }} 93% {{ opacity: .55; }} 94% {{ opacity: 1; }} 96% {{ opacity: .75; }} 97% {{ opacity: 1; }} }}
+
+/* ---------- Base ---------- */
+.stApp {{ background: {T['fondo']}, {T['bg']} !important; background-attachment: fixed !important;
+  color: {T['text']} !important; font-family: {FUENTE}; transition: background-color .4s ease, color .4s ease; }}
 [data-testid="stHeader"] {{ background: transparent !important; }}
-#MainMenu, footer {{ visibility: hidden; }}
-.block-container {{ padding-top: 2.2rem; max-width: 1380px; }}
+#MainMenu, footer, [data-testid="stDecoration"] {{ visibility: hidden; display: none; }}
+.block-container {{ padding-top: 1.6rem; max-width: 1380px; }}
 
-p, span, label, div, li, .stMarkdown {{ color: {T['text']}; font-family: {FUENTE}; }}
+p, span, label, div, li, td, th, .stMarkdown {{ color: {T['text']}; font-family: {FUENTE}; }}
 h1, h2, h3, h4, h5, h6 {{ color: {T['text']} !important; font-family: {FUENTE} !important; letter-spacing: -0.01em; }}
-h3 {{ font-weight: 600 !important; }}
-h4, h5 {{ font-weight: 600 !important; }}
-[data-testid="stCaptionContainer"] p, .stCaption {{ color: {T['sub']} !important; }}
+strong, b {{ color: {T['text']}; }}
+a {{ color: {T['accent']} !important; }}
+[data-testid="stCaptionContainer"] p, .stCaption, small {{ color: {T['sub']} !important; }}
+::selection {{ background: {rgba(T['accent'], 0.30)}; }}
+code {{ color: {T['accent']} !important; background: {rgba(T['accent'], 0.08)} !important; }}
+
+/* Scrollbar */
+::-webkit-scrollbar {{ width: 10px; height: 10px; }}
+::-webkit-scrollbar-thumb {{ background: {rgba(T['accent'], 0.35)}; border-radius: 10px; }}
+::-webkit-scrollbar-track {{ background: transparent; }}
 
 /* Sidebar */
 [data-testid="stSidebar"] {{ background-color: {T['card']} !important; border-right: 1px solid {T['border']}; }}
 [data-testid="stSidebar"] * {{ color: {T['text']}; }}
 
-/* Tabs */
-.stTabs [data-baseweb="tab-list"] {{ gap: 4px; border-bottom: 1px solid {T['border']}; flex-wrap: wrap; }}
-.stTabs [data-baseweb="tab-list"] button {{ background: transparent !important; padding: 10px 14px; border-radius: 8px 8px 0 0; }}
-.stTabs [data-baseweb="tab-list"] button p {{ color: {T['sub']} !important; font-size: 0.95rem; font-weight: 500; }}
+/* ---------- Tabs ---------- */
+.stTabs [data-baseweb="tab-list"] {{ gap: 4px; border-bottom: 1px solid {T['border']}; flex-wrap: wrap; background: transparent; }}
+.stTabs [data-baseweb="tab-list"] button {{ background: transparent !important; padding: 10px 14px; border-radius: 10px 10px 0 0;
+  transition: background-color .25s ease, transform .2s ease; }}
+.stTabs [data-baseweb="tab-list"] button:hover {{ background: {rgba(T['accent'], 0.07)} !important; }}
+.stTabs [data-baseweb="tab-list"] button p {{ color: {T['sub']} !important; font-size: 0.95rem; font-weight: 600; transition: color .25s; }}
 .stTabs [data-baseweb="tab-list"] button:hover p {{ color: {T['text']} !important; }}
-.stTabs [data-baseweb="tab-list"] button[aria-selected="true"] p {{ color: {T['accent']} !important; font-weight: 600; }}
-.stTabs [data-baseweb="tab-highlight"] {{ background-color: {T['accent']} !important; height: 3px; }}
+.stTabs [data-baseweb="tab-list"] button[aria-selected="true"] p {{ color: {T['accent']} !important; text-shadow: {GLOW_TXT}; }}
+.stTabs [data-baseweb="tab-highlight"] {{ background-color: {T['accent']} !important; height: 3px; border-radius: 3px;
+  box-shadow: {GLOW if T['neon'] else 'none'}; }}
 .stTabs [data-baseweb="tab-border"] {{ display: none; }}
+.stTabs [data-baseweb="tab-panel"] {{ animation: mdFade .35s ease both; padding-top: 10px; }}
+[data-testid="stTab"] {{ border-radius: 10px 10px 0 0; transition: background-color .25s ease; padding-left: 12px !important; padding-right: 12px !important; }}
+[data-testid="stTab"]:hover {{ background: {rgba(T['accent'], 0.07)}; }}
+[data-testid="stTab"] p {{ color: {T['sub']} !important; font-weight: 600; transition: color .25s; }}
+[data-testid="stTab"]:hover p {{ color: {T['text']} !important; }}
+[data-testid="stTab"][aria-selected="true"] p {{ color: {T['accent']} !important; text-shadow: {GLOW_TXT}; }}
+[data-testid="stTabPanel"] {{ animation: mdFade .35s ease both; padding-top: 10px; }}
+input, textarea, select, button {{ font-family: {FUENTE} !important; }}
 
-/* Inputs */
+/* ---------- Inputs ---------- */
 div[data-baseweb="input"] > div, div[data-baseweb="select"] > div, div[data-baseweb="textarea"] > div,
-div[data-baseweb="base-input"] {{ background-color: {T['input']} !important; border-color: {T['border']} !important; }}
-input, textarea {{ color: {T['text']} !important; background-color: {T['input']} !important; }}
-[data-baseweb="popover"] ul, [data-baseweb="popover"] li, [data-baseweb="menu"] {{ background-color: {T['input']} !important; color: {T['text']} !important; }}
+div[data-baseweb="base-input"], div[data-baseweb="input"], div[data-baseweb="textarea"] {{
+  background-color: {T['input']} !important; border-color: {T['border']} !important; border-radius: 10px !important;
+  transition: border-color .2s ease, box-shadow .2s ease; }}
+div[data-baseweb="input"]:focus-within, div[data-baseweb="select"] > div:focus-within, div[data-baseweb="textarea"]:focus-within {{
+  border-color: {T['accent']} !important; box-shadow: 0 0 0 3px {rgba(T['accent'], 0.18)} !important; }}
+input, textarea {{ color: {T['text']} !important; background-color: {T['input']} !important; caret-color: {T['accent']}; }}
+input::placeholder, textarea::placeholder {{ color: {T['sub']} !important; opacity: .8; }}
+[data-baseweb="popover"] ul, [data-baseweb="popover"] li, [data-baseweb="menu"], [data-baseweb="popover"] > div {{
+  background-color: {T['input']} !important; color: {T['text']} !important; }}
+[data-baseweb="popover"] li:hover {{ background-color: {rgba(T['accent'], 0.12)} !important; }}
+[data-baseweb="calendar"], [data-baseweb="calendar"] * {{ background-color: {T['input']} !important; color: {T['text']} !important; }}
 [data-testid="stNumberInput"] button {{ background-color: {T['input']} !important; border-color: {T['border']} !important; }}
+[data-testid="stNumberInput"] button:hover {{ background-color: {rgba(T['accent'], 0.15)} !important; }}
+[data-testid="stNumberInput"] button svg {{ fill: {T['text']} !important; }}
+[data-baseweb="select"] svg {{ fill: {T['sub']} !important; }}
 
-/* Métricas nativas */
-[data-testid="stMetric"] {{ background: {T['card']}; border: 1px solid {T['border']}; border-radius: 12px; padding: 14px 16px; }}
-[data-testid="stMetricValue"], [data-testid="stMetricLabel"] {{ color: {T['text']} !important; }}
+/* Sliders, toggles, radios, checkboxes → color de acento */
+[data-testid="stSlider"] [role="slider"] {{ background-color: {T['accent']} !important; border-color: {T['accent']} !important;
+  box-shadow: 0 0 0 4px {rgba(T['accent'], 0.18)} !important; }}
+[data-testid="stSlider"] [data-testid="stThumbValue"], [data-testid="stSliderThumbValue"] {{ color: {T['accent']} !important; font-weight: 700; }}
+[data-testid="stSlider"] [data-baseweb="slider"] > div > div > div:first-child {{ background: {rgba(T['accent'], 0.85)} !important; }}
+[data-testid="stTickBarMin"], [data-testid="stTickBarMax"] {{ color: {T['sub']} !important; }}
+label[data-baseweb="checkbox"] input:checked + div, label[data-baseweb="checkbox"] [aria-checked="true"] {{ background-color: {T['accent']} !important; }}
+label[data-baseweb="radio"] input:checked + div {{ background-color: {T['accent']} !important; border-color: {T['accent']} !important; }}
+label[data-baseweb="radio"] input:checked + div > div {{ background-color: {T['on_accent']} !important; }}
+[data-testid="stProgress"] [role="progressbar"] > div > div > div {{ background: linear-gradient(90deg, {T['accent']}, {T['accent2']}) !important; }}
 
-/* Botones */
+/* Alertas */
+[data-testid="stAlert"] {{ background: {rgba(T['accent'], 0.07)} !important; border: 1px solid {T['border']} !important; border-radius: 12px !important; }}
+[data-testid="stAlert"] * {{ color: {T['text']} !important; }}
+
+/* ---------- Botones ---------- */
 .stButton>button, .stFormSubmitButton>button, .stDownloadButton>button {{
   background-color: {T['card']} !important; color: {T['text']} !important; border: 1px solid {T['border']} !important;
-  border-radius: 10px; font-weight: 600; transition: border-color .2s, background-color .2s;
-}}
+  border-radius: 12px; font-weight: 600; box-shadow: {SOMBRA};
+  transition: transform .18s ease, border-color .2s ease, background-color .2s ease, box-shadow .25s ease; }}
 .stButton>button:hover, .stFormSubmitButton>button:hover, .stDownloadButton>button:hover {{
   border-color: {T['accent']} !important; background-color: {rgba(T['accent'], 0.08)} !important;
-}}
+  transform: translateY(-2px); box-shadow: {GLOW}; }}
+.stButton>button:active, .stDownloadButton>button:active {{ transform: translateY(0) scale(.98); }}
+.stButton>button p, .stDownloadButton>button p, .stFormSubmitButton>button p {{ color: inherit !important; }}
 .stButton>button:focus-visible, .stDownloadButton>button:focus-visible {{ outline: 2px solid {T['accent']}; outline-offset: 2px; }}
+.stDownloadButton>button {{ border-style: solid !important; }}
 
-/* Contenedores, expanders, formularios */
-[data-testid="stExpander"] details {{ background: {T['card']}; border: 1px solid {T['border']} !important; border-radius: 12px; }}
-[data-testid="stForm"] {{ background: {T['card']}; border: 1px solid {T['border']} !important; border-radius: 12px; }}
-[data-testid="stVerticalBlockBorderWrapper"] {{ border-color: {T['border']} !important; border-radius: 14px !important; }}
-hr {{ border-color: {T['border']} !important; }}
+/* Selector de tema (botones con icono) */
+[class*="st-key-tema_btn_"] button {{ border-radius: 999px !important; min-height: 42px; font-size: 1.15rem; padding: 0 !important; }}
+.st-key-tema_btn_{st.session_state.tema} button {{ background: {T['accent']} !important; border-color: {T['accent']} !important;
+  box-shadow: {GLOW} !important; animation: mdPulse 2.4s ease-in-out 1; }}
+
+/* ---------- Contenedores ---------- */
+[data-testid="stExpander"] details {{ background: {T['card']}; border: 1px solid {T['border']} !important; border-radius: 14px;
+  transition: border-color .2s; }}
+[data-testid="stExpander"] details:hover {{ border-color: {rgba(T['accent'], 0.6)} !important; }}
+[data-testid="stExpander"] summary:hover * {{ color: {T['accent']} !important; }}
+[data-testid="stExpander"] svg {{ fill: {T['sub']} !important; }}
+[data-testid="stForm"] {{ background: {T['card']}; border: 1px solid {T['border']} !important; border-radius: 16px; box-shadow: {SOMBRA}; }}
+[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVerticalBlock"]) {{ border-radius: 16px !important; }}
+[data-testid="stVerticalBlockBorderWrapper"] {{ border-color: {T['border']} !important; }}
+[data-testid="stLayoutWrapper"] > div[data-testid="stVerticalBlock"], .stVerticalBlock[class*="border"] {{ border-color: {T['border']} !important; }}
+hr {{ border-color: {T['border']} !important; opacity: .8; }}
+iframe {{ border-radius: 14px; }}
 
 /* ---------- Componentes propios ---------- */
-.md-hero {{ display:flex; justify-content:space-between; align-items:flex-end; gap:24px; flex-wrap:wrap;
-  padding: 6px 0 18px 0; border-bottom: 1px solid {T['border']}; margin-bottom: 18px; }}
-.md-hero h1 {{ font-size: 2.3rem; font-weight: 700; margin: 0; padding: 0; line-height: 1.1; }}
+.md-hero {{ position: relative; padding: 6px 0 16px 0; animation: mdFadeUp .5s ease both; }}
+.md-hero::after {{ content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; border-radius: 3px;
+  background: linear-gradient(90deg, {T['accent']}, {T['accent2']}, {rgba(T['accent'], 0.1)}, {T['accent']});
+  background-size: 200% 100%; animation: mdSlide 6s linear infinite; box-shadow: {GLOW if T['neon'] else 'none'}; }}
+.md-hero h1 {{ font-size: 2.4rem; font-weight: 800; margin: 0; padding: 0; line-height: 1.1; text-shadow: {GLOW_TXT};
+  {'animation: mdFlicker 7s linear infinite;' if T['neon'] else ''} }}
+.md-hero h1 .cur {{ color: {T['accent']}; animation: mdBlink 1.1s step-end infinite; font-weight: 400; }}
 .md-hero .md-hero-sub {{ color: {T['sub']}; font-size: 1rem; margin-top: 6px; }}
-.md-hero .md-chip {{ border: 1px solid {T['border']}; background: {T['card']}; border-radius: 999px; padding: 6px 14px;
-  font-size: .9rem; color: {T['text']}; }}
+.md-hero .md-chip {{ display: inline-block; margin-top: 10px; border: 1px solid {T['border']}; background: {T['card']};
+  border-radius: 999px; padding: 5px 14px; font-size: .88rem; color: {T['text']}; }}
 .md-hero .md-chip b {{ color: {T['accent']}; }}
+.md-hero .md-chip .live {{ display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: {T['ok']};
+  margin-right: 7px; vertical-align: middle; animation: mdPulse 2s infinite; }}
 
-.md-sec {{ margin: 6px 0 14px 0; }}
-.md-sec .md-sec-t {{ font-size: 1.35rem; font-weight: 600; color: {T['text']}; }}
-.md-sec .md-sec-s {{ color: {T['sub']}; font-size: .95rem; margin-top: 2px; max-width: 80ch; }}
+.md-sec {{ margin: 6px 0 14px 0; animation: mdFadeUp .45s ease both; }}
+.md-sec .md-sec-t {{ font-size: 1.3rem; font-weight: 700; color: {T['text']}; display: flex; align-items: center; gap: 10px; }}
+.md-sec .md-sec-t::before {{ content: ""; width: 4px; height: 1.1em; border-radius: 4px; background: {T['accent']};
+  box-shadow: {GLOW if T['neon'] else 'none'}; }}
+.md-sec .md-sec-s {{ color: {T['sub']}; font-size: .95rem; margin-top: 3px; max-width: 85ch; padding-left: 14px; }}
 
-.md-kpi {{ background: {T['card']}; border: 1px solid {T['border']}; border-radius: 14px; padding: 16px 18px;
-  border-left: 4px solid var(--c); height: 100%; }}
-.md-kpi .k-l {{ color: {T['sub']}; font-size: .85rem; font-weight: 500; }}
-.md-kpi .k-v {{ color: {T['text']}; font-size: 1.65rem; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }}
-.md-kpi .k-s {{ color: {T['sub']}; font-size: .83rem; margin-top: 2px; }}
+.md-kpi {{ background: {T['card']}; border: 1px solid {T['border']}; border-radius: 16px; padding: 16px 18px;
+  position: relative; overflow: hidden; height: 100%; box-shadow: {SOMBRA};
+  animation: mdFadeUp .5s ease both; animation-delay: var(--d, 0s);
+  transition: transform .22s ease, box-shadow .25s ease, border-color .25s ease; }}
+.md-kpi::before {{ content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--c); }}
+.md-kpi:hover {{ transform: translateY(-4px); border-color: var(--c); box-shadow: {GLOW}; }}
+.md-kpi .k-l {{ color: {T['sub']}; font-size: .84rem; font-weight: 600; }}
+.md-kpi .k-v {{ color: {T['text']}; font-size: 1.6rem; font-weight: 800; margin-top: 6px; font-variant-numeric: tabular-nums; }}
+.md-kpi .k-s {{ color: {T['sub']}; font-size: .82rem; margin-top: 3px; }}
 
-.md-verdict {{ display:flex; gap: 28px; align-items:center; justify-content:space-between; flex-wrap: wrap;
-  background: {T['card']}; border: 1px solid {T['border']}; border-radius: 16px; padding: 22px 26px;
-  border-top: 5px solid var(--c); }}
-.md-verdict .v-tag {{ display:inline-block; font-size:.85rem; font-weight:600; color: var(--c);
-  background: var(--cb); padding: 4px 12px; border-radius: 999px; }}
-.md-verdict .v-big {{ font-size: 1.5rem; font-weight: 600; margin: 10px 0 6px 0; color: {T['text']}; line-height: 1.3; max-width: 46ch; }}
+.md-verdict {{ display: flex; gap: 28px; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  background: linear-gradient(135deg, var(--cb), {T['card']} 55%); border: 1px solid var(--c); border-radius: 18px;
+  padding: 22px 26px; animation: mdFadeUp .55s ease both; box-shadow: 0 0 0 1px {rgba('#000000', 0)}, {GLOW}; }}
+.md-verdict .v-tag {{ display: inline-flex; align-items: center; gap: 8px; font-size: .85rem; font-weight: 700; color: var(--c);
+  background: var(--cb); padding: 5px 13px; border-radius: 999px; }}
+.md-verdict .v-tag::before {{ content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--c); }}
+.md-verdict .v-big {{ font-size: 1.45rem; font-weight: 700; margin: 12px 0 8px 0; color: {T['text']}; line-height: 1.3; max-width: 46ch; }}
 .md-verdict .v-big b {{ color: var(--c); }}
-.md-verdict .v-txt {{ color: {T['sub']}; font-size: .97rem; max-width: 70ch; line-height: 1.5; }}
+.md-verdict .v-txt {{ color: {T['sub']}; font-size: .96rem; max-width: 70ch; line-height: 1.55; }}
 .md-verdict .v-txt b {{ color: {T['text']}; }}
 
-.dotwrap {{ display:flex; flex-direction:column; align-items:center; gap:10px; }}
-.dotgrid {{ display:grid; grid-template-columns: repeat(10, 13px); gap: 5px; }}
-.dot {{ width: 13px; height: 13px; border-radius: 50%; }}
-.dot.ok {{ background: {T['ok']}; }}
+.dotwrap {{ display: flex; flex-direction: column; align-items: center; gap: 10px; }}
+.dotgrid {{ display: grid; grid-template-columns: repeat(10, 13px); gap: 5px; }}
+.dot {{ width: 13px; height: 13px; border-radius: 50%; animation: mdPop .35s ease both; }}
+.dot.ok {{ background: {T['ok']}; {'box-shadow: 0 0 6px ' + rgba(T['ok'], 0.7) + ';' if T['neon'] else ''} }}
 .dot.mid {{ background: {T['warn']}; }}
-.dot.bad {{ background: {rgba(T['bad'], 0.85)}; }}
-.dotleg {{ display:flex; gap: 12px; font-size: .78rem; color: {T['sub']}; flex-wrap: wrap; justify-content:center; }}
+.dot.bad {{ background: {rgba(T['bad'], 0.85)}; {'box-shadow: 0 0 6px ' + rgba(T['bad'], 0.7) + ';' if T['neon'] else ''} }}
+.dotleg {{ display: flex; gap: 12px; font-size: .78rem; color: {T['sub']}; flex-wrap: wrap; justify-content: center; }}
 .dotleg span {{ color: {T['sub']}; }}
-.dotleg i {{ display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:4px; vertical-align: middle; }}
+.dotleg i {{ display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }}
 
-.md-box {{ background: {T['card']}; border: 1px solid {T['border']}; border-radius: 14px; padding: 16px 18px; }}
-.md-box .b-t {{ font-weight: 600; font-size: 1rem; margin-bottom: 8px; color: {T['text']}; }}
-.md-row {{ display:flex; justify-content:space-between; padding: 7px 0; border-bottom: 1px dashed {T['border']}; font-size: .94rem; }}
+.md-box {{ background: {T['card']}; border: 1px solid {T['border']}; border-radius: 16px; padding: 16px 18px; box-shadow: {SOMBRA};
+  animation: mdFadeUp .5s ease both; transition: border-color .25s ease; }}
+.md-box:hover {{ border-color: {rgba(T['accent'], 0.55)}; }}
+.md-box .b-t {{ font-weight: 700; font-size: 1rem; margin-bottom: 8px; color: {T['text']}; }}
+.md-row {{ display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px dashed {T['border']}; font-size: .93rem; }}
 .md-row:last-child {{ border-bottom: none; }}
 .md-row .r-l {{ color: {T['sub']}; }}
-.md-row .r-v {{ color: {T['text']}; font-weight: 600; font-variant-numeric: tabular-nums; }}
-.pill {{ display:inline-block; padding: 2px 10px; border-radius: 999px; font-size: .8rem; font-weight: 600; }}
+.md-row .r-v {{ color: {T['text']}; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }}
+.pill {{ display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: .8rem; font-weight: 700; }}
 .pill.ok {{ color: {T['ok']}; background: {rgba(T['ok'], 0.14)}; }}
 .pill.bad {{ color: {T['bad']}; background: {rgba(T['bad'], 0.14)}; }}
 .pill.warn {{ color: {T['warn']}; background: {rgba(T['warn'], 0.16)}; }}
 
-.md-answer {{ background: {rgba(T['accent'], 0.07)}; border: 1px solid {rgba(T['accent'], 0.25)}; border-radius: 12px;
-  padding: 12px 16px; font-size: 1rem; margin-top: 6px; }}
-.md-answer b {{ color: {T['accent']}; font-size: 1.15rem; }}
+.md-answer {{ background: {rgba(T['accent'], 0.07)}; border: 1px solid {rgba(T['accent'], 0.3)}; border-radius: 14px;
+  padding: 12px 16px; font-size: 1rem; margin-top: 6px; animation: mdFade .3s ease both; }}
+.md-answer b {{ color: {T['accent']}; font-size: 1.15rem; text-shadow: {GLOW_TXT}; }}
 
-.kb-col {{ background: {T['card']}; border: 1px solid {T['border']}; border-radius: 14px; padding: 12px; min-height: 120px; }}
-.kb-h {{ display:flex; justify-content:space-between; font-weight: 600; margin-bottom: 10px; }}
-.kb-h span.n {{ color: {T['sub']}; font-weight: 500; }}
-.kb-card {{ background: {T['bg']}; border: 1px solid {T['border']}; border-left: 3px solid var(--c); border-radius: 8px;
-  padding: 8px 10px; margin-bottom: 8px; font-size: .92rem; }}
+.kb-col {{ background: {T['card']}; border: 1px solid {T['border']}; border-radius: 16px; padding: 12px; min-height: 140px;
+  box-shadow: {SOMBRA}; animation: mdFadeUp .5s ease both; animation-delay: var(--d, 0s); }}
+.kb-h {{ display: flex; justify-content: space-between; align-items: center; font-weight: 700; margin-bottom: 10px; }}
+.kb-h span.n {{ color: {T['sub']}; font-weight: 600; background: {rgba(T['accent'], 0.1)}; border-radius: 999px; padding: 1px 9px; font-size: .82rem; }}
+.kb-card {{ background: {T['bg']}; border: 1px solid {T['border']}; border-left: 3px solid var(--c); border-radius: 10px;
+  padding: 9px 11px; margin-bottom: 8px; font-size: .92rem; transition: transform .18s ease, box-shadow .2s ease; }}
+.kb-card:hover {{ transform: translateX(3px); box-shadow: {GLOW}; }}
 
-.md-step {{ display:flex; align-items:center; gap:10px; font-weight:600; font-size:1rem; margin: 2px 0 8px 0; }}
-.md-step .n {{ width: 26px; height: 26px; border-radius: 50%; display:inline-flex; align-items:center; justify-content:center;
-  background: {T['accent']}; color: {T['card']}; font-size: .85rem; }}
+.md-step {{ display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.02rem; margin: 2px 0 10px 0; }}
+.md-step .n {{ width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  background: {T['accent']}; color: {T['on_accent']} !important; font-size: .85rem; box-shadow: {GLOW if T['neon'] else 'none'}; }}
+
+/* Tablas HTML propias */
+.md-tablewrap {{ overflow-x: auto; border: 1px solid {T['border']}; border-radius: 14px; background: {T['card']};
+  animation: mdFadeUp .5s ease both; box-shadow: {SOMBRA}; }}
+.md-table {{ width: 100%; border-collapse: collapse; font-size: .92rem; }}
+.md-table th {{ text-align: left; padding: 11px 14px; color: {T['sub']}; font-weight: 700; font-size: .82rem;
+  background: {rgba(T['accent'], 0.07)}; border-bottom: 1px solid {T['border']}; white-space: nowrap; }}
+.md-table th, .md-table td {{ border-left: none !important; border-right: none !important; border-top: none !important; }}
+.md-table td {{ padding: 10px 14px; border-bottom: 1px solid {T['border']}; font-variant-numeric: tabular-nums; }}
+.md-table tr:last-child td {{ border-bottom: none; }}
+.md-table tbody tr {{ transition: background-color .15s ease; }}
+.md-table tbody tr:hover {{ background: {rgba(T['accent'], 0.06)}; }}
+.md-table tr.hl td {{ background: {rgba(T['accent'], 0.14)}; font-weight: 700; }}
+.md-table tr.hl td:first-child {{ box-shadow: inset 3px 0 0 {T['accent']}; }}
+
+.md-foot {{ text-align: center; color: {T['sub']}; font-size: .82rem; padding: 28px 0 8px 0; }}
+
+/* Accesibilidad: sin animaciones si el sistema lo pide */
+@media (prefers-reduced-motion: reduce) {{
+  *, *::before, *::after {{ animation: none !important; transition: none !important; }}
+}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -221,10 +375,10 @@ def paso(numero, titulo):
     st.markdown(f'<div class="md-step"><span class="n">{numero}</span>{titulo}</div>', unsafe_allow_html=True)
 
 
-def kpi(col, etiqueta, valor, sub="", color=None):
+def kpi(col, etiqueta, valor, sub="", color=None, delay=0.0):
     color = color or T["accent"]
     col.markdown(
-        f'<div class="md-kpi" style="--c:{color}"><div class="k-l">{etiqueta}</div>'
+        f'<div class="md-kpi" style="--c:{color};--d:{delay:.2f}s"><div class="k-l">{etiqueta}</div>'
         f'<div class="k-v">{valor}</div><div class="k-s">{sub}</div></div>',
         unsafe_allow_html=True,
     )
@@ -236,6 +390,17 @@ def caja_filas(titulo, filas):
     return f'<div class="md-box"><div class="b-t">{titulo}</div>{html}</div>'
 
 
+def tabla_html(df, resaltar=None):
+    """Tabla HTML con el estilo del tema (st.dataframe no respeta los temas oscuros personalizados)."""
+    cab = "".join(f"<th>{c}</th>" for c in df.columns)
+    filas = []
+    for i, fila in enumerate(df.itertuples(index=False)):
+        clase = ' class="hl"' if resaltar is not None and resaltar(fila) else ""
+        celdas = "".join(f"<td>{v}</td>" for v in fila)
+        filas.append(f"<tr{clase}>{celdas}</tr>")
+    return f'<div class="md-tablewrap"><table class="md-table"><thead><tr>{cab}</tr></thead><tbody>{"".join(filas)}</tbody></table></div>'
+
+
 def pill(texto, tipo):
     return f'<span class="pill {tipo}">{texto}</span>'
 
@@ -245,6 +410,30 @@ def limpiar_widgets(*prefijos):
     for k in list(st.session_state.keys()):
         if any(str(k).startswith(p) for p in prefijos):
             del st.session_state[k]
+
+
+def mostrar_mermaid(codigo, alto="420px", key=None):
+    """Renderiza Mermaid con los colores del tema activo (si el código no trae su propio %%{init}%%)."""
+    codigo = str(codigo or "").strip()
+    if not codigo:
+        st.info("Escribe código Mermaid para ver la vista previa.")
+        return
+    if not codigo.startswith("%%{init"):
+        variables = {
+            "background": T["card"], "mainBkg": T["card"], "primaryColor": T["card"],
+            "primaryTextColor": T["text"], "primaryBorderColor": T["accent"], "lineColor": T["accent"],
+            "secondaryColor": T["bg"], "tertiaryColor": T["bg"], "textColor": T["text"],
+            "nodeBorder": T["accent"], "clusterBkg": T["bg"], "edgeLabelBackground": T["card"],
+            "actorBkg": T["card"], "actorBorder": T["accent"], "actorTextColor": T["text"],
+            "actorLineColor": T["sub"], "signalColor": T["text"], "signalTextColor": T["text"],
+            "labelBoxBkgColor": T["card"], "labelTextColor": T["text"], "noteBkgColor": T["bg"],
+            "noteTextColor": T["text"], "sequenceNumberColor": T["on_accent"],
+            "fontFamily": "JetBrains Mono, Consolas, monospace" if T["neon"] else "Segoe UI, Helvetica, Arial, sans-serif",
+        }
+        init = json.dumps({"theme": "base", "themeVariables": variables})
+        codigo = f"%%{{init: {init}}}%%\n" + codigo
+    with st.container(border=True):
+        st_mermaid(codigo, height=alto, key=key)
 
 
 def estilo_fig(fig, height=380, **kwargs):
@@ -1002,12 +1191,22 @@ def generar_word_mementomori():
 # =====================================================================
 # 6. ENCABEZADO
 # =====================================================================
-st.markdown(
-    f'<div class="md-hero"><div><h1>MatrixDev</h1>'
-    f'<div class="md-hero-sub">Gestión y arquitectura de proyectos de software</div></div>'
-    f'<div class="md-chip">Proyecto <b>{st.session_state.nombre_proj}</b></div></div>',
-    unsafe_allow_html=True,
-)
+col_hero, col_tema = st.columns([5, 1.25], vertical_alignment="bottom")
+with col_hero:
+    cursor = '<span class="cur">_</span>' if T["neon"] else ""
+    st.markdown(
+        f'<div class="md-hero"><h1>MatrixDev{cursor}</h1>'
+        f'<div class="md-hero-sub">Gestión y arquitectura de proyectos de software</div>'
+        f'<div class="md-chip"><span class="live"></span>Proyecto <b>{st.session_state.nombre_proj}</b></div></div>',
+        unsafe_allow_html=True,
+    )
+with col_tema:
+    st.markdown(f'<div style="text-align:center;color:{T["sub"]};font-size:.8rem;margin-bottom:4px">'
+                f'Tema: <b style="color:{T["accent"]}">{T["nombre"]}</b></div>', unsafe_allow_html=True)
+    b_cols = st.columns(3)
+    for b_col, (clave, datos) in zip(b_cols, TEMAS.items()):
+        b_col.button(datos["icono"], key=f"tema_btn_{clave}", help=f"Cambiar a tema {datos['nombre'].lower()}",
+                     on_click=cambiar_tema, args=(clave,), **ANCHO)
 
 tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab_full = st.tabs([
     "Requisitos", "Modelado", "Gestión", "🎲 Monte Carlo", "Flujos", "EDT (WBS)", "Riesgos",
@@ -1076,7 +1275,7 @@ with tab2:
         st.download_button("📌 Descargar diagrama (.mmd)", st.session_state.modelo_mermaid.encode("utf-8"),
                            f"Diagrama_Modelado_{slug(st.session_state.nombre_proj)}.mmd", "text/plain", **ANCHO)
     with c_prev:
-        st_mermaid(st.session_state.modelo_mermaid)
+        mostrar_mermaid(st.session_state.modelo_mermaid, "380px", key=f"mm_modelo_{st.session_state.tema}")
 
 # ---------------------------------------------------------------------
 # TAB 3: GESTIÓN (KANBAN)
@@ -1102,12 +1301,12 @@ with tab3:
 
         colores_estado = {"Pendiente": T["sub"], "En Proceso": T["warn"], "Completado": T["ok"]}
         cols_kb = st.columns(3)
-        for col, estado in zip(cols_kb, ESTADOS_KANBAN):
+        for n_col, (col, estado) in enumerate(zip(cols_kb, ESTADOS_KANBAN)):
             items = [t for t in tareas if t["Estado"] == estado]
             cards = "".join(f'<div class="kb-card" style="--c:{colores_estado[estado]}">{t["Tarea"]}</div>' for t in items)
             if not items:
                 cards = f'<div style="color:{T["sub"]};font-size:.88rem">Sin tareas</div>'
-            col.markdown(f'<div class="kb-col"><div class="kb-h"><span>{estado}</span><span class="n">{len(items)}</span></div>'
+            col.markdown(f'<div class="kb-col" style="--d:{n_col * 0.08:.2f}s"><div class="kb-h"><span>{estado}</span><span class="n">{len(items)}</span></div>'
                          f'{cards}</div>', unsafe_allow_html=True)
 
         st.write("")
@@ -1196,9 +1395,9 @@ El motor sortea miles de duraciones dentro de ese rango, como si ejecutaras el p
                 parametros_txt = f"{horas_dia} h/día, mejor caso −{pct_opt}%, peor caso +{pct_pes}%"
             elif tipo_dist in ("Triangular", "Beta-PERT"):
                 ce1, ce2, ce3 = st.columns(3)
-                mc_opt = ce1.number_input("Optimista (días)", min_value=0.5, value=10.0, step=1.0, key="mc_opt")
-                mc_prob = ce2.number_input("Más probable (días)", min_value=0.5, value=20.0, step=1.0, key="mc_prob")
-                mc_pes = ce3.number_input("Pesimista (días)", min_value=0.5, value=45.0, step=1.0, key="mc_pes")
+                mc_opt = ce1.number_input("Optimista (días)", min_value=0.5, value=10.0, step=1.0, format="%.1f", key="mc_opt")
+                mc_prob = ce2.number_input("Más probable (días)", min_value=0.5, value=20.0, step=1.0, format="%.1f", key="mc_prob")
+                mc_pes = ce3.number_input("Pesimista (días)", min_value=0.5, value=45.0, step=1.0, format="%.1f", key="mc_pes")
                 if not (mc_opt <= mc_prob <= mc_pes) or mc_opt >= mc_pes:
                     valido, error_msg = False, "Revisa los valores: optimista ≤ más probable ≤ pesimista, y optimista < pesimista."
                 else:
@@ -1206,15 +1405,15 @@ El motor sortea miles de duraciones dentro de ese rango, como si ejecutaras el p
                 parametros_txt = f"O={fmt_num(mc_opt, 1)}, M={fmt_num(mc_prob, 1)}, P={fmt_num(mc_pes, 1)} días"
             elif tipo_dist == "Normal":
                 ce1, ce2 = st.columns(2)
-                mc_mean = ce1.number_input("Duración promedio (días)", min_value=1.0, value=22.0, step=1.0, key="mc_mean")
-                mc_std = ce2.number_input("Desviación estándar (días)", min_value=0.1, value=5.0, step=0.5, key="mc_std")
+                mc_mean = ce1.number_input("Duración promedio (días)", min_value=1.0, value=22.0, step=1.0, format="%.1f", key="mc_mean")
+                mc_std = ce2.number_input("Desviación estándar (días)", min_value=0.1, value=5.0, step=0.5, format="%.1f", key="mc_std")
                 st.caption(f"El 95% de los escenarios caerá aprox. entre {fmt_num(max(mc_mean - 2 * mc_std, 0.5), 1)} "
                            f"y {fmt_num(mc_mean + 2 * mc_std, 1)} días.")
                 parametros_txt = f"media={fmt_num(mc_mean, 1)}, desv.={fmt_num(mc_std, 1)} días"
             else:
                 ce1, ce2 = st.columns(2)
-                mc_min = ce1.number_input("Mínimo (días)", min_value=0.5, value=12.0, step=1.0, key="mc_min_u")
-                mc_max = ce2.number_input("Máximo (días)", min_value=0.5, value=40.0, step=1.0, key="mc_max_u")
+                mc_min = ce1.number_input("Mínimo (días)", min_value=0.5, value=12.0, step=1.0, format="%.1f", key="mc_min_u")
+                mc_max = ce2.number_input("Máximo (días)", min_value=0.5, value=40.0, step=1.0, format="%.1f", key="mc_max_u")
                 if mc_min >= mc_max:
                     valido, error_msg = False, "El mínimo debe ser menor que el máximo."
                 parametros_txt = f"mín={fmt_num(mc_min, 1)}, máx={fmt_num(mc_max, 1)} días"
@@ -1235,7 +1434,7 @@ El motor sortea miles de duraciones dentro de ese rango, como si ejecutaras el p
                                       help="Imprevistos en el gasto diario, independientes de la duración.")
         with cc2:
             st.markdown("**Metas**")
-            dias_meta = st.number_input("Plazo meta (días)", min_value=0.5, value=25.0, step=1.0, key="mc_dias_meta")
+            dias_meta = st.number_input("Plazo meta (días)", min_value=0.5, value=25.0, step=1.0, format="%.1f", key="mc_dias_meta")
             costo_meta = st.number_input("Presupuesto meta ($)", min_value=0, value=500000, step=25000, key="mc_costo_meta")
             percentil_target = st.slider("Confianza exigida (percentil)", 50, 99, 85, step=1, key="mc_target_perc",
                                          help="Con qué probabilidad quieres poder cumplir lo que prometas.")
@@ -1299,7 +1498,8 @@ El motor sortea miles de duraciones dentro de ese rango, como si ejecutaras el p
         n_ok = int(round(met["prob_ambos"]))
         n_mid = int(round(met["prob_ambos"] + met["prob_uno"])) - n_ok
         n_mid = max(0, min(n_mid, 100 - n_ok))
-        puntos = "".join(f'<span class="dot {c}"></span>' for c in ["ok"] * n_ok + ["mid"] * n_mid + ["bad"] * (100 - n_ok - n_mid))
+        clases = ["ok"] * n_ok + ["mid"] * n_mid + ["bad"] * (100 - n_ok - n_mid)
+        puntos = "".join(f'<span class="dot {c}" style="animation-delay:{i * 0.008:.3f}s"></span>' for i, c in enumerate(clases))
 
         if nivel == "ok":
             recomendacion = (f"Puedes comprometer <b>{fmt_num(met['pt'], 1)} días</b> (término el <b>{f_pt.strftime('%d/%m/%Y')}</b>) "
@@ -1332,13 +1532,13 @@ El motor sortea miles de duraciones dentro de ese rango, como si ejecutaras el p
         st.write("")
         k1, k2, k3, k4 = st.columns(4)
         kpi(k1, "Entrega probable (P50)", f"{fmt_num(met['p50'], 1)} días",
-            f"Término {f_p50.strftime('%d/%m/%Y')} · apuesta 50/50", T["sub"])
+            f"Término {f_p50.strftime('%d/%m/%Y')} · apuesta 50/50", T["sub"], 0.0)
         kpi(k2, f"Plazo a comprometer (P{perc})", f"{fmt_num(met['pt'], 1)} días",
-            f"Término {f_pt.strftime('%d/%m/%Y')}", T["accent"])
+            f"Término {f_pt.strftime('%d/%m/%Y')}", T["accent"], 0.08)
         kpi(k3, "Escenario pesimista (P95)", f"{fmt_num(met['p95'], 1)} días",
-            f"Término {f_p95.strftime('%d/%m/%Y')}", T["warn"])
+            f"Término {f_p95.strftime('%d/%m/%Y')}", T["warn"], 0.16)
         kpi(k4, f"Presupuesto a comprometer (P{perc})", fmt_money(met["ptc"]),
-            f"Mediana {fmt_money(met['p50c'])}", T["accent2"])
+            f"Mediana {fmt_money(met['p50c'])}", T["accent2"], 0.24)
 
         # ---------------- Indicadores tipo velocímetro ----------------
         def color_prob(v):
@@ -1446,7 +1646,7 @@ El motor sortea miles de duraciones dentro de ese rango, como si ejecutaras el p
             q1, q2 = st.columns(2)
             with q1:
                 x_dias = st.number_input("Si me comprometo a … días", min_value=0.5,
-                                         value=float(np.ceil(met["pt"])), step=1.0, key="mc_calc_dias")
+                                         value=float(np.ceil(met["pt"])), step=1.0, format="%.1f", key="mc_calc_dias")
                 prob_x = (dias <= x_dias).mean() * 100
                 st.markdown(f'<div class="md-answer">Probabilidad de cumplir: <b>{fmt_num(prob_x, 1)}%</b><br>'
                             f'Término el {fecha_fin(fecha_inicio, x_dias, habiles).strftime("%d/%m/%Y")}</div>',
@@ -1547,10 +1747,7 @@ El motor sortea miles de duraciones dentro de ese rango, como si ejecutaras el p
             "Cómo leerlo": f"{r['p']}% de los escenarios termina en {fmt_num(r['Días'], 1)} días o menos",
         } for r in tp])
         objetivo = f"P{perc}"
-        sty = df_tp.style.apply(
-            lambda fila: [f"background-color: {rgba(T['accent'], 0.16)}; font-weight: 600"
-                          if fila["Confianza"] == objetivo else "" for _ in fila], axis=1)
-        st.dataframe(sty, hide_index=True, **ANCHO)
+        st.markdown(tabla_html(df_tp, resaltar=lambda fila: fila[0] == objetivo), unsafe_allow_html=True)
 
         # ---------------- Inspector y capacidad ----------------
         st.write("")
@@ -1597,14 +1794,19 @@ El motor sortea miles de duraciones dentro de ese rango, como si ejecutaras el p
             "Cumple presupuesto": ok_c,
         })
         with st.expander("Ver escenarios extremos y datos crudos", expanded=False):
+            def formatear_extremos(df):
+                return pd.DataFrame({
+                    "Iteración": df["Iteración"].map(fmt_num),
+                    "Duración": df["Duración (días)"].map(lambda v: f"{fmt_num(v, 1)} d"),
+                    "Costo": df["Costo ($)"].map(fmt_money),
+                    "Plazo": df["Cumple plazo"].map(lambda v: pill("Cumple", "ok") if v else pill("Atraso", "bad")),
+                    "Presupuesto": df["Cumple presupuesto"].map(lambda v: pill("Dentro", "ok") if v else pill("Excede", "bad")),
+                })
             t1, t2 = st.columns(2)
-            cfg_cols = {"Costo ($)": st.column_config.NumberColumn(format="$%d"),
-                        "Cumple plazo": st.column_config.CheckboxColumn(),
-                        "Cumple presupuesto": st.column_config.CheckboxColumn()}
             t1.markdown("**10 escenarios más rápidos**")
-            t1.dataframe(df_sims.nsmallest(10, "Duración (días)"), hide_index=True, column_config=cfg_cols, **ANCHO)
+            t1.markdown(tabla_html(formatear_extremos(df_sims.nsmallest(10, "Duración (días)"))), unsafe_allow_html=True)
             t2.markdown("**10 escenarios más lentos**")
-            t2.dataframe(df_sims.nlargest(10, "Duración (días)"), hide_index=True, column_config=cfg_cols, **ANCHO)
+            t2.markdown(tabla_html(formatear_extremos(df_sims.nlargest(10, "Duración (días)"))), unsafe_allow_html=True)
 
         # ---------------- Exportación ----------------
         st.divider()
@@ -1634,7 +1836,7 @@ with tab5:
         st.download_button("📌 Descargar diagrama de flujo (.mmd)", st.session_state.flujo_codigo.encode("utf-8"),
                            f"Flujo_Secuencia_{slug(st.session_state.nombre_proj)}.mmd", "text/plain", **ANCHO)
     with c_f2:
-        st_mermaid(st.session_state.flujo_codigo)
+        mostrar_mermaid(st.session_state.flujo_codigo, "400px", key=f"mm_flujo_{st.session_state.tema}")
 
 # ---------------------------------------------------------------------
 # TAB 6: EDT (WBS)
@@ -1668,7 +1870,8 @@ with tab6:
     st.write("")
     seccion("Diagrama jerárquico")
     if not df_edt.empty:
-        st_mermaid(generar_mermaid_edt(st.session_state.edt_list, st.session_state.nombre_proj))
+        mostrar_mermaid(generar_mermaid_edt(st.session_state.edt_list, st.session_state.nombre_proj), "560px",
+                        key=f"mm_edt_{st.session_state.tema}")
     else:
         st.info("Agrega un paquete de trabajo para ver el árbol jerárquico.")
 
@@ -1890,7 +2093,11 @@ with tab_full:
 # =====================================================================
 with st.sidebar:
     st.markdown("### MatrixDev")
-    st.radio("Tema visual", list(TEMAS.keys()), format_func=lambda k: TEMAS[k]["nombre"], key="tema")
+    st.caption("Cambia el tema con los iconos ☀️ 🌙 💻 de la esquina superior.")
+    s_cols = st.columns(3)
+    for s_col, (clave, datos) in zip(s_cols, TEMAS.items()):
+        s_col.button(datos["icono"], key=f"tema_btn_side_{clave}", help=f"Tema {datos['nombre'].lower()}",
+                     on_click=cambiar_tema, args=(clave,), **ANCHO)
     st.divider()
     st.markdown("**Resumen del proyecto**")
     resumen = [
