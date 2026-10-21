@@ -81,7 +81,14 @@ PLANTILLAS_FLUJO = {
 }
 
 # Datos del proyecto (no son widgets)
+# El proyecto parte vacío: el inicio se va completando a medida que se ingresan datos
 DATOS_INICIALES = {
+    "rf_list": [], "rnf_list": [], "kanban_tasks": [], "edt_list": [], "riesgos_list": [],
+    "mc_semilla_val": 42,
+}
+
+# Datos de muestra que se cargan con el botón "Cargar ejemplo"
+DATOS_EJEMPLO = {
     "rf_list": ["Autenticación OAuth2.", "CRUD de usuarios."],
     "rnf_list": ["Latencia < 200ms.", "Cifrado AES-256 en base de datos."],
     "kanban_tasks": [
@@ -104,15 +111,16 @@ DATOS_INICIALES = {
         {"Riesgo": "Falla en servidor cloud", "Probabilidad": 2, "Impacto": 5},
         {"Riesgo": "Incompatibilidad de navegador", "Probabilidad": 1, "Impacto": 2},
     ],
-    "mc_semilla_val": 42,
+    "objetivo_text": "Automatizar el flujo de inventario con una arquitectura minimalista.",
+    "integrantes": "Juan Pérez",
 }
 
 # Valores de widgets que deben conservarse al cambiar de página
 WIDGETS_PERSISTENTES = {
     "tema": "claro",
     "nombre_proj": "MatrixDev Core",
-    "integrantes": "Juan Pérez",
-    "objetivo_text": "Automatizar el flujo de inventario con una arquitectura minimalista.",
+    "integrantes": "",
+    "objetivo_text": "",
     "modelo_mermaid": "graph TD\n    A[Inicio] --> B{Validar}\n    B -->|Sí| C[Éxito]\n    B -->|No| D[Error]",
     "select_tipo_flujo": "Autenticación",
     "flujo_codigo": PLANTILLAS_FLUJO["Autenticación"],
@@ -404,6 +412,77 @@ iframe {{ border-radius: 10px; }}
 .mx-brand .ico {{ color: {T['accent']}; }}
 .mx-brand small {{ display: block; font-weight: 400; font-size: .78rem; color: {T['sub']}; font-family: {FUENTE}; }}
 
+/* ---------- Navegación lateral más visible ---------- */
+[data-testid="stSidebarNavLink"] {{ padding: 3px 10px !important; margin: 1px 0 !important; border: 1px solid transparent; }}
+[data-testid="stSidebarNavLink"]:hover {{ background: {rgba(T['accent'], 0.07)} !important; border-color: {T['border']}; }}
+[data-testid="stSidebarNavLink"] span {{ font-size: .98rem !important; }}
+[data-testid="stSidebarNavLink"][aria-current="page"] {{ border-color: {rgba(T['accent'], 0.35)}; }}
+[data-testid="stNavSectionHeader"] {{ font-size: .76rem !important; font-weight: 700 !important; color: {T['accent']} !important;
+  margin-top: 14px !important; letter-spacing: .01em; }}
+.mx-sideprog {{ border: 1px solid {T['border']}; border-radius: 12px; padding: 10px 12px; margin: 10px 0 12px 0; background: {T['bg']}; }}
+.mx-sideprog .top {{ display: flex; justify-content: space-between; font-size: .82rem; color: {T['sub']}; }}
+.mx-sideprog .top b {{ color: {T['text']}; }}
+.mx-sideprog .mx-bar {{ padding: 2px 0 0 0; }}
+.mx-sideprog .nx {{ font-size: .8rem; color: {T['accent']}; margin-top: 7px; font-weight: 600; }}
+
+/* ---------- Bienvenida ---------- */
+.mx-hero {{ padding: 6px 0 22px 0; margin-bottom: 20px; border-bottom: 1px solid {T['border']}; position: relative; animation: mdRise .5s ease both; }}
+.mx-hero::after {{ content: ""; position: absolute; left: 0; bottom: -1px; height: 2px; width: 160px; background: {T['accent']};
+  transform-origin: left; animation: mdDraw .8s .2s cubic-bezier(.2,.7,.2,1) both; box-shadow: {GLOW if NEON else 'none'}; }}
+.mx-hero-t {{ font-family: {T['titulos']}; font-size: 2.6rem; font-weight: 700; letter-spacing: -0.025em; line-height: 1.1;
+  color: {T['text']}; text-shadow: {GLOW_TXT}; }}
+.mx-hero-s {{ color: {T['sub']}; font-size: 1.08rem; margin-top: 8px; max-width: 62ch; line-height: 1.5; }}
+.mx-hint {{ display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; padding: 7px 14px; border-radius: 999px;
+  border: 1px solid {rgba(T['accent'], 0.3)}; background: {T['soft']}; color: {T['accent']}; font-size: .9rem; font-weight: 600; }}
+.mx-hint .ico {{ animation: mdNudge 1.8s ease-in-out infinite; }}
+@keyframes mdNudge {{ 0%, 100% {{ transform: translateX(0); }} 50% {{ transform: translateX(-5px); }} }}
+.mx-p {{ color: {T['sub']}; line-height: 1.6; margin: 0; font-size: .95rem; }}
+.mx-p b {{ color: {T['text']}; }}
+.mx-progress .mx-big {{ font-family: {T['titulos']}; font-size: 2.6rem; font-weight: 700; color: {T['accent']}; line-height: 1;
+  margin-top: 4px; text-shadow: {GLOW_TXT}; }}
+.mx-progress .mx-big span {{ font-size: 1.2rem; margin-left: 2px; }}
+.mx-sub {{ color: {T['sub']}; font-size: .88rem; margin-top: 4px; }}
+.mx-sub b {{ color: {T['text']}; }}
+.mx-empty {{ display: flex; gap: 14px; align-items: flex-start; color: {T['text']}; font-size: .93rem; line-height: 1.5; }}
+.mx-empty span {{ color: {T['sub']}; font-size: .86rem; }}
+
+/* Tarjetas de pasos */
+.mx-card {{ background: {T['card']}; border: 1px solid {T['border']}; border-radius: 14px; padding: 16px 16px 14px 16px;
+  min-height: 205px; margin-bottom: 8px; position: relative; animation: mdRise .45s ease both; animation-delay: var(--d, 0s);
+  transition: border-color .2s ease, transform .2s ease; }}
+.mx-card:hover {{ border-color: {rgba(T['accent'], 0.6)}; transform: translateY(-2px); }}
+.mx-card.next {{ border-color: {T['accent']}; box-shadow: {GLOW}; }}
+.mx-card.ok {{ border-color: {rgba(T['ok'], 0.45)}; }}
+.mx-card-h {{ display: flex; align-items: center; gap: 10px; }}
+.mx-card-h .pill {{ margin-left: auto; }}
+.mx-num {{ width: 30px; height: 30px; border-radius: 9px; display: inline-grid; place-items: center; font-weight: 700; font-size: .95rem;
+  background: {T['soft']}; color: {T['accent']}; border: 1px solid {rgba(T['accent'], 0.25)}; font-family: {T['titulos']}; }}
+.mx-card.next .mx-num {{ background: {T['accent']}; color: {T['on_accent']}; }}
+.mx-card.ok .mx-num {{ background: {rgba(T['ok'], 0.14)}; color: {T['ok']}; border-color: {rgba(T['ok'], 0.3)}; }}
+.mx-card-i {{ color: {T['sub']}; }}
+.mx-card-t {{ font-family: {T['titulos']}; font-weight: 600; font-size: 1.05rem; margin-top: 12px; color: {T['text']}; }}
+.mx-card-d {{ color: {T['sub']}; font-size: .88rem; line-height: 1.5; margin-top: 4px; }}
+.mx-card-f {{ color: {T['text']}; font-size: .8rem; margin-top: 10px; padding-top: 8px; border-top: 1px dashed {T['border']}; font-weight: 500; }}
+
+.st-key-cta_continuar a {{ background: {T['accent']} !important; border-color: {T['accent']} !important; box-shadow: {GLOW}; }}
+.st-key-cta_continuar a span, .st-key-cta_continuar a p {{ color: {T['on_accent']} !important; font-weight: 600; }}
+.st-key-cta_continuar a:hover {{ filter: brightness(1.06); }}
+
+/* ---------- Botón colgante (modo oscuro) ---------- */
+[data-testid="stAppDeployButton"], [data-testid="stToolbarActions"] {{ display: none !important; }}
+.st-key-btn_luna {{ position: fixed !important; top: 0; right: 34px; z-index: 1000001; width: 52px !important;
+  display: flex !important; flex-direction: column; align-items: center; transform-origin: top center;
+  animation: mdSway 6s ease-in-out infinite; }}
+.st-key-btn_luna::before {{ content: ""; display: block; width: 1.5px; height: 30px;
+  background: linear-gradient({rgba(T['sub'], 0.2)}, {T['sub']}); }}
+.st-key-btn_luna button {{ width: 48px !important; height: 48px !important; min-height: 48px !important; border-radius: 50% !important;
+  padding: 0 !important; background: {T['card']} !important; border: 1px solid {T['border']} !important;
+  box-shadow: 0 6px 18px {rgba('#000000', 0.12)}, {GLOW if NEON else '0 0 0 0 transparent'} !important; }}
+.st-key-btn_luna button:hover {{ border-color: {T['accent']} !important; transform: scale(1.06); }}
+.st-key-btn_luna button [data-testid="stIconMaterial"] {{ font-size: 1.45rem !important; color: {T['accent'] if st.session_state.tema == 'claro' else T['text']} !important; }}
+.st-key-btn_luna:hover {{ animation-play-state: paused; }}
+@keyframes mdSway {{ 0%, 100% {{ transform: rotate(-2.5deg); }} 50% {{ transform: rotate(2.5deg); }} }}
+
 @media (prefers-reduced-motion: reduce) {{
   *, *::before, *::after {{ animation: none !important; transition: none !important; }}
 }}
@@ -448,6 +527,7 @@ ICONOS = {
     "repeat": '<path d="M4 12a8 8 0 0 1 13.7-5.6L20 9"/><path d="M20 4v5h-5"/><path d="M20 12a8 8 0 0 1-13.7 5.6L4 15"/><path d="M4 20v-5h5"/>',
     "folder": '<path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-10Z"/>',
     "circle": '<circle cx="12" cy="12" r="7"/>',
+    "arrow_left": '<path d="M19 12H5M11 6l-6 6 6 6"/>',
     "gauge": '<path d="M4 17a8 8 0 1 1 16 0"/><path d="m12 17 3.5-5.5"/><path d="M4 17h2M18 17h2M12 9V7"/>',
     "progress": '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17Z" fill="currentColor" stroke="none" opacity=".35"/>',
 }
@@ -1337,86 +1417,256 @@ def nuevas_semilla():
 # =====================================================================
 # 10. PÁGINAS
 # =====================================================================
-def pagina_inicio():
-    encabezado("home", "Resumen del proyecto",
-               f"{st.session_state.objetivo_text}")
+# ---------------------------------------------------------------------
+# Guía paso a paso y avance del proyecto
+# ---------------------------------------------------------------------
+PASOS = [
+    ("requisitos", "Requisitos", "layers",
+     "Escribe el objetivo del proyecto y define qué debe hacer el sistema (requisitos funcionales) "
+     "y cómo debe comportarse (no funcionales).", True),
+    ("modelado", "Modelado", "nodes",
+     "Dibuja la arquitectura con un diagrama Mermaid. Parte del ejemplo y edítalo a tu medida.", False),
+    ("flujos", "Flujos", "flow",
+     "Elige una plantilla de flujo o de secuencia (login, API) y adáptala a tu sistema.", False),
+    ("kanban", "Kanban", "kanban",
+     "Registra las tareas del equipo y su estado: pendiente, en proceso o completada.", True),
+    ("edt", "EDT", "tree",
+     "Desglosa el trabajo en fases y paquetes, cada uno con horas y costo estimados.", True),
+    ("montecarlo", "Monte Carlo", "curve",
+     "Simula miles de escenarios y descubre qué plazo y presupuesto puedes comprometer.", True),
+    ("riesgos", "Riesgos", "shield",
+     "Anota los riesgos con su probabilidad e impacto y revísalos en el mapa de calor.", True),
+    ("reporte", "Reporte Memento Mori", "doc",
+     "Descarga el informe crítico en Word, armado con todo lo que ingresaste.", False),
+    ("descargas", "Descarga completa", "archive",
+     "Baja todos los entregables (Word, Excel, CSV y diagramas) en un solo ZIP.", False),
+]
 
-    rf, rnf = st.session_state.rf_list, st.session_state.rnf_list
-    tareas = st.session_state.kanban_tasks
-    edt = st.session_state.edt_list
-    riesgos = st.session_state.riesgos_list
+
+def marcar_visita(clave):
+    st.session_state.setdefault("_visto", set()).add(clave)
+
+
+def marcar_descarga(clave):
+    st.session_state.setdefault("_descargado", set()).add(clave)
+
+
+def estado_paso(clave):
+    """Devuelve (completo, detalle) de cada paso según los datos ingresados."""
+    ss = st.session_state
+    visto = ss.get("_visto", set())
+    bajado = ss.get("_descargado", set())
+    if clave == "requisitos":
+        ok = bool(str(ss.objetivo_text).strip()) and bool(ss.rf_list) and bool(ss.rnf_list)
+        return ok, f"{len(ss.rf_list)} funcionales y {len(ss.rnf_list)} no funcionales"
+    if clave == "modelado":
+        return "modelado" in visto, "Diagrama revisado" if "modelado" in visto else "Sin revisar"
+    if clave == "flujos":
+        return "flujos" in visto, "Flujo revisado" if "flujos" in visto else "Sin revisar"
+    if clave == "kanban":
+        n = len(ss.kanban_tasks)
+        return n > 0, f"{n} tarea(s) registradas"
+    if clave == "edt":
+        h = sum(float(e.get("Horas", 0) or 0) for e in ss.edt_list)
+        return len(ss.edt_list) > 0 and h > 0, f"{len(ss.edt_list)} paquete(s), {fmt_num(h)} h"
+    if clave == "montecarlo":
+        ok = "montecarlo" in visto and MC_ACTUAL is not None
+        return ok, (f"Plazo P{MC_ACTUAL['cfg']['perc']}: {fmt_num(MC_ACTUAL['met']['pt'], 1)} días" if ok else "Sin simular")
+    if clave == "riesgos":
+        n = len(ss.riesgos_list)
+        return n > 0, f"{n} riesgo(s) registrados"
+    if clave == "reporte":
+        return "reporte" in bajado, "Descargado" if "reporte" in bajado else "Sin descargar"
+    if clave == "descargas":
+        return "descargas" in bajado, "Descargado" if "descargas" in bajado else "Sin descargar"
+    return False, ""
+
+
+def avance_proyecto():
+    estados = [(i + 1, p, *estado_paso(p[0])) for i, p in enumerate(PASOS)]
+    hechos = sum(1 for e in estados if e[2])
+    siguiente = next((e for e in estados if not e[2]), None)
+    return estados, hechos, siguiente
+
+
+def cargar_ejemplo():
+    import copy
+    ss = st.session_state
+    for k, v in DATOS_EJEMPLO.items():
+        ss[k] = copy.deepcopy(v)
+    for lista in ("rf_list", "rnf_list", "kanban_tasks", "edt_list", "riesgos_list"):
+        ss[f"_ver_{lista}"] = ss.get(f"_ver_{lista}", 0) + 1
+
+
+def vaciar_proyecto():
+    ss = st.session_state
+    for lista in ("rf_list", "rnf_list", "kanban_tasks", "edt_list", "riesgos_list"):
+        ss[lista] = []
+        ss[f"_ver_{lista}"] = ss.get(f"_ver_{lista}", 0) + 1
+    ss.objetivo_text = ""
+    ss.integrantes = ""
+    ss.nombre_proj = "MatrixDev Core"
+    ss._visto = set()
+    ss._descargado = set()
+
+
+def pie_navegacion(clave):
+    """Enlaces al paso anterior y al siguiente, al final de cada página."""
+    claves = [p[0] for p in PASOS]
+    if clave not in claves:
+        return
+    i = claves.index(clave)
+    st.write("")
+    st.divider()
+    c1, c2, c3 = st.columns([1, 1, 1])
+    if i > 0:
+        c1.page_link(PAGINAS[claves[i - 1]], label=f"Anterior: {i}. {PASOS[i - 1][1]}", icon=":material/arrow_back:", **ANCHO)
+    else:
+        c1.page_link(PG_INICIO, label="Volver al inicio", icon=":material/arrow_back:", **ANCHO)
+    c2.page_link(PG_INICIO, label="Ver avance del proyecto", icon=":material/space_dashboard:", **ANCHO)
+    if i < len(claves) - 1:
+        c3.page_link(PAGINAS[claves[i + 1]], label=f"Siguiente: {i + 2}. {PASOS[i + 1][1]}", icon=":material/arrow_forward:", **ANCHO)
+
+
+def pagina_inicio():
+    ss = st.session_state
+    estados, hechos, siguiente = avance_proyecto()
+    pct = hechos / len(PASOS) * 100
+
+    # ---------------- Presentación ----------------
+    html(f'<div class="mx-hero"><div class="mx-hero-t">{ss.nombre_proj}</div>'
+         f'<div class="mx-hero-s">Tu espacio para planificar, estimar y documentar un proyecto de software, '
+         f'desde los requisitos hasta el informe final.</div>'
+         f'<div class="mx-hint">{ico("arrow_left", 17)}Empieza en el menú de la izquierda y avanza punto por punto</div></div>')
+
+    c_info, c_prog = st.columns([1.5, 1], gap="large")
+    with c_info:
+        html(f'<div class="mx-panel"><div class="pt">{ico("info", 17)}¿Qué es {ss.nombre_proj}?</div>'
+             f'<p class="mx-p">Es una herramienta que reúne en un solo lugar las piezas de la gestión de un proyecto de software: '
+             f'requisitos, diagramas, tareas, desglose del trabajo, estimación probabilística de plazos y costos, y riesgos.</p>'
+             f'<div class="pt" style="margin-top:14px">{ico("target", 17)}¿Para qué sirve?</div>'
+             f'<p class="mx-p">Para responder con datos tres preguntas clave: <b>qué</b> hay que construir, <b>cuánto</b> '
+             f'tiempo y dinero costará con un nivel de confianza conocido, y <b>qué</b> podría salir mal. '
+             f'Al final genera el informe en Word y las planillas en Excel listas para entregar.</p></div>')
+    with c_prog:
+        sig_txt = (f"{siguiente[0]}. {siguiente[1][1]}" if siguiente else "Todo listo")
+        html(f'<div class="mx-panel mx-progress"><div class="pt">{ico("progress", 17)}Avance del proyecto</div>'
+             f'<div class="mx-big">{fmt_num(pct)}<span>%</span></div>'
+             f'<div class="mx-sub">{hechos} de {len(PASOS)} pasos completados</div>'
+             f'<div class="mx-bar" style="--c:{T["accent"]};--w:{pct:.1f}%;--m:101%"><div class="tr"><div class="fl"></div></div></div>'
+             f'<div class="mx-sub" style="margin-top:10px">Siguiente paso: <b>{sig_txt}</b></div></div>')
+        if siguiente:
+            with st.container(key="cta_continuar"):
+                st.page_link(PAGINAS[siguiente[1][0]], label=f"Continuar con el paso {siguiente[0]}: {siguiente[1][1]}",
+                             icon=":material/arrow_forward:", **ANCHO)
+        b1, b2 = st.columns(2)
+        b1.button("Cargar ejemplo", icon=":material/auto_awesome:", on_click=cargar_ejemplo,
+                  help="Rellena el proyecto con datos de muestra para ver cómo funciona todo.", **ANCHO)
+        b2.button("Empezar de cero", icon=":material/restart_alt:", on_click=vaciar_proyecto,
+                  help="Borra todos los datos ingresados.", **ANCHO)
+
+    # ---------------- Cómo empezar ----------------
+    st.write("")
+    seccion("Cómo empezar", "Abre el menú de la izquierda y recorre los pasos en orden. Cada paso alimenta al siguiente "
+                            "y este inicio se va completando solo con lo que ingresas.", "flag")
+    for fila in range(0, len(estados), 3):
+        cols = st.columns(3, gap="medium")
+        for col, (num, (clave, titulo, icono, desc, _req), ok, detalle) in zip(cols, estados[fila:fila + 3]):
+            es_sig = siguiente is not None and siguiente[0] == num
+            clase = "mx-card ok" if ok else ("mx-card next" if es_sig else "mx-card")
+            estado = pill("Completo", "ok", "check") if ok else (pill("Siguiente", "warn") if es_sig else pill("Pendiente", "neu"))
+            with col:
+                html(f'<div class="{clase}" style="--d:{(num - 1) * 0.04:.2f}s"><div class="mx-card-h">'
+                     f'<span class="mx-num">{num}</span><span class="mx-card-i">{ico(icono, 18)}</span>{estado}</div>'
+                     f'<div class="mx-card-t">{titulo}</div><div class="mx-card-d">{desc}</div>'
+                     f'<div class="mx-card-f">{detalle}</div></div>')
+                st.page_link(PAGINAS[clave], label=f"Abrir paso {num}", icon=":material/arrow_forward:", **ANCHO)
+
+    # ---------------- Resumen que se va calculando ----------------
+    st.write("")
+    seccion("Resumen del proyecto", "Se calcula con los datos que vas ingresando en cada paso.", "grid")
+    rf, rnf = ss.rf_list, ss.rnf_list
+    tareas, edt, riesgos = ss.kanban_tasks, ss.edt_list, ss.riesgos_list
     n_ok = sum(t["Estado"] == "Completado" for t in tareas)
-    avance = n_ok / len(tareas) * 100 if tareas else 0
     horas = sum(float(e.get("Horas", 0) or 0) for e in edt)
     costo = sum(float(e.get("Costo", 0) or 0) for e in edt)
     sevs = [int(r["Probabilidad"]) * int(r["Impacto"]) for r in riesgos]
-    criticos = sum(s >= 12 for s in sevs)
+    mc_ok = estado_paso("montecarlo")[0]
 
-    celdas = [
-        {"icono": "layers", "etiqueta": "Requisitos", "valor": f"{len(rf) + len(rnf)}", "sub": f"{len(rf)} funcionales, {len(rnf)} no funcionales"},
-        {"icono": "kanban", "etiqueta": "Avance de tareas", "valor": f"{fmt_num(avance)}%", "sub": f"{n_ok} de {len(tareas)} completadas"},
-        {"icono": "tree", "etiqueta": "Esfuerzo planificado", "valor": f"{fmt_num(horas)} h", "sub": fmt_money(costo)},
-        {"icono": "shield", "etiqueta": "Riesgos altos", "valor": f"{criticos}", "sub": f"de {len(riesgos)} registrados"},
-    ]
-    if MC_ACTUAL:
-        m, c = MC_ACTUAL["met"], MC_ACTUAL["cfg"]
-        celdas.append({"icono": "curve", "etiqueta": f"Plazo P{c['perc']}", "valor": f"{fmt_num(m['pt'], 1)} d",
-                       "sub": MC_ACTUAL["fecha_pt"].strftime("%d/%m/%Y"), "destacado": True})
-    franja(celdas)
+    def o_pendiente(cond, valor, sub, paso_n):
+        return (valor, sub) if cond else ("—", f"Pendiente: paso {paso_n}")
+
+    v1 = o_pendiente(rf or rnf, f"{len(rf) + len(rnf)}", f"{len(rf)} funcionales, {len(rnf)} no funcionales", 1)
+    v2 = o_pendiente(tareas, f"{fmt_num(n_ok / len(tareas) * 100) if tareas else 0}%", f"{n_ok} de {len(tareas)} completadas", 4)
+    v3 = o_pendiente(edt, f"{fmt_num(horas)} h", fmt_money(costo), 5)
+    v4 = o_pendiente(mc_ok, f"{fmt_num(MC_ACTUAL['met']['pt'], 1)} d" if mc_ok else "",
+                     MC_ACTUAL["fecha_pt"].strftime("%d/%m/%Y") if mc_ok else "", 6)
+    v5 = o_pendiente(riesgos, f"{sum(s >= 12 for s in sevs)}", f"altos de {len(riesgos)} registrados", 7)
+    franja([
+        {"icono": "layers", "etiqueta": "Requisitos", "valor": v1[0], "sub": v1[1]},
+        {"icono": "kanban", "etiqueta": "Avance de tareas", "valor": v2[0], "sub": v2[1]},
+        {"icono": "tree", "etiqueta": "Esfuerzo planificado", "valor": v3[0], "sub": v3[1]},
+        {"icono": "curve", "etiqueta": "Plazo comprometido", "valor": v4[0], "sub": v4[1], "destacado": mc_ok},
+        {"icono": "shield", "etiqueta": "Riesgos altos", "valor": v5[0], "sub": v5[1]},
+    ])
 
     st.write("")
     col_a, col_b = st.columns([1.35, 1], gap="large")
     with col_a:
-        seccion("Viabilidad del plan", "Según la simulación Monte Carlo vigente.", "target")
-        if MC_ACTUAL:
+        seccion("Viabilidad del plan", "Según la simulación Monte Carlo.", "target")
+        if mc_ok:
             m, c = MC_ACTUAL["met"], MC_ACTUAL["cfg"]
             html('<div class="mx-panel">'
                  + barra_prob(f"Cumplir el plazo de {fmt_num(c['dias_meta'], 0)} días", m["prob_t"], c["perc"])
                  + barra_prob(f"Cumplir el presupuesto de {fmt_money(c['costo_meta'])}", m["prob_c"], c["perc"])
                  + barra_prob("Cumplir ambas metas", m["prob_ambos"], c["perc"])
-                 + f'<div style="color:{T["sub"]};font-size:.8rem;margin-top:6px">La marca vertical es la confianza exigida (P{c["perc"]}).</div>'
-                 + '</div>')
+                 + f'<div style="color:{T["sub"]};font-size:.8rem;margin-top:6px">La marca vertical es la confianza exigida (P{c["perc"]}).</div></div>')
         else:
-            st.warning(MC_ERROR)
+            html(f'<div class="mx-panel mx-empty">{ico("curve", 22, T["sub"])}<div>Aparecerá cuando completes el '
+                 f'<b>paso 6: Monte Carlo</b>.<br><span>Ingresa tu estimación de días y tus metas de plazo y presupuesto.</span></div></div>')
+            st.page_link(PG_MC, label="Ir al paso 6: Monte Carlo", icon=":material/arrow_forward:")
 
         st.write("")
-        seccion("Siguientes pasos sugeridos", "Recomendaciones generadas a partir del estado actual.", "flag")
-        pasos = []
-        if not rnf:
-            pasos.append(("alert", T["warn"], "Define al menos un requisito no funcional (rendimiento, seguridad, disponibilidad)."))
-        if criticos:
-            pasos.append(("alert", T["bad"], f"{criticos} riesgo(s) con severidad alta necesitan un plan de contingencia documentado."))
+        seccion("Recomendaciones", "Generadas a partir de lo que llevas.", "flag")
+        recos = []
+        if siguiente:
+            recos.append(("info", T["accent"], f"Tu siguiente paso es <b>{siguiente[0]}. {siguiente[1][1]}</b>: {siguiente[1][3][0].lower() + siguiente[1][3][1:]}"))
+        if rf and not rnf:
+            recos.append(("alert", T["warn"], "Agrega al menos un requisito no funcional (rendimiento, seguridad, disponibilidad)."))
+        if any(s >= 12 for s in sevs):
+            recos.append(("alert", T["bad"], f"{sum(s >= 12 for s in sevs)} riesgo(s) de severidad alta necesitan un plan de contingencia."))
         wip = sum(t["Estado"] == "En Proceso" for t in tareas)
         if wip > 3:
-            pasos.append(("alert", T["warn"], f"Hay {wip} tareas en proceso a la vez. Limitar el WIP a 3 acelera las entregas."))
-        if not edt:
-            pasos.append(("info", T["accent"], "Desglosa el trabajo en la EDT para estimar horas y costos."))
-        if MC_ACTUAL:
+            recos.append(("alert", T["warn"], f"Hay {wip} tareas en proceso a la vez. Limitar el WIP a 3 acelera las entregas."))
+        if mc_ok:
             m, c = MC_ACTUAL["met"], MC_ACTUAL["cfg"]
             if m["prob_ambos"] < c["perc"]:
-                pasos.append(("alert", T["warn"], f"La probabilidad de cumplir plazo y presupuesto ({fmt_num(m['prob_ambos'], 1)}%) "
+                recos.append(("alert", T["warn"], f"La probabilidad de cumplir plazo y presupuesto ({fmt_num(m['prob_ambos'], 1)}%) "
                                                    f"está bajo la confianza exigida ({c['perc']}%). Ajusta metas o alcance."))
             else:
-                pasos.append(("check", T["ok"], "El plan cumple la confianza exigida en plazo y presupuesto."))
-        if not pasos:
-            pasos.append(("check", T["ok"], "Todo en orden. Puedes generar el reporte final."))
-        html('<div class="mx-panel">' + "".join(
-            f'<div class="mx-todo">{ico(i, 18, c)}<span>{t}</span></div>' for i, c, t in pasos) + "</div>")
+                recos.append(("check", T["ok"], "El plan cumple la confianza exigida en plazo y presupuesto."))
+        if not siguiente:
+            recos.append(("check", T["ok"], "Completaste todos los pasos. Tus entregables están listos."))
+        html('<div class="mx-panel">' + "".join(f'<div class="mx-todo">{ico(i, 18, c)}<span>{t}</span></div>' for i, c, t in recos) + "</div>")
 
     with col_b:
         seccion("Riesgos principales", "Ordenados por severidad.", "shield")
         if riesgos:
-            top = sorted(riesgos, key=lambda r: -int(r["Probabilidad"]) * int(r["Impacto"]))[:4]
-            filas = [(r["Riesgo"], f'{int(r["Probabilidad"]) * int(r["Impacto"])} &nbsp;'
-                      f'{pill_riesgo(int(r["Probabilidad"]) * int(r["Impacto"]))}') for r in top]
+            top = sorted(riesgos, key=lambda r: -int(r["Probabilidad"]) * int(r["Impacto"]))[:5]
+            filas = [(r["Riesgo"], f'{int(r["Probabilidad"]) * int(r["Impacto"])} &nbsp;{pill_riesgo(int(r["Probabilidad"]) * int(r["Impacto"]))}')
+                     for r in top]
             html(panel("Severidad (probabilidad × impacto)", filas, "alert"))
         else:
-            st.info("Sin riesgos registrados.")
+            html(f'<div class="mx-panel mx-empty">{ico("shield", 22, T["sub"])}<div>Aún no hay riesgos.<br>'
+                 f'<span>Regístralos en el paso 7.</span></div></div>')
 
         st.write("")
-        seccion("Módulos", "", "grid")
-        for pagina in [PG_REQ, PG_EDT, PG_MC, PG_RIESGOS, PG_REPORTE]:
-            st.page_link(pagina, **ANCHO)
+        seccion("Datos del proyecto", "", "users")
+        html(panel("Ficha", [
+            ("Nombre", ss.nombre_proj),
+            ("Equipo", ss.integrantes or "Sin definir"),
+            ("Objetivo", (ss.objetivo_text[:60] + "…") if len(ss.objetivo_text) > 60 else (ss.objetivo_text or "Sin definir")),
+        ], "info"))
 
 
 def pagina_requisitos():
@@ -2108,7 +2358,7 @@ def pagina_reporte():
         seccion("Descargar", icono="archive")
         st.download_button("Descargar reporte (.docx)", generar_word_mementomori(),
                            f"Reporte_MementoMori_{slug(st.session_state.nombre_proj)}.docx", DOCX,
-                           icon=":material/description:", type="primary", **ANCHO)
+                           icon=":material/description:", type="primary", on_click=marcar_descarga, args=("reporte",), **ANCHO)
         if MC_ACTUAL is None:
             st.warning("La simulación tiene parámetros inválidos; el capítulo 6 lo indicará.")
         st.write("")
@@ -2152,29 +2402,49 @@ def pagina_descargas():
             zf.writestr("Mermaid/Modelado.mmd", st.session_state.modelo_mermaid)
             zf.writestr("Mermaid/Flujo.mmd", st.session_state.flujo_codigo)
         st.download_button("Descargar paquete completo (.zip)", buf.getvalue(), f"Reporte_Full_{nombre_s}.zip",
-                           "application/zip", icon=":material/folder_zip:", type="primary", **ANCHO)
+                           "application/zip", icon=":material/folder_zip:", type="primary",
+                           on_click=marcar_descarga, args=("descargas",), **ANCHO)
         st.caption(f"Tamaño aproximado: {fmt_num(len(buf.getvalue()) / 1024, 0)} KB")
 
 
 # =====================================================================
 # 11. NAVEGACIÓN
 # =====================================================================
-PG_INICIO = st.Page(pagina_inicio, title="Resumen", icon=":material/space_dashboard:", url_path="resumen", default=True)
-PG_REQ = st.Page(pagina_requisitos, title="Requisitos", icon=":material/checklist:", url_path="requisitos")
-PG_MODELADO = st.Page(pagina_modelado, title="Modelado", icon=":material/account_tree:", url_path="modelado")
-PG_FLUJOS = st.Page(pagina_flujos, title="Flujos", icon=":material/route:", url_path="flujos")
-PG_KANBAN = st.Page(pagina_gestion, title="Kanban", icon=":material/view_kanban:", url_path="kanban")
-PG_EDT = st.Page(pagina_edt, title="EDT", icon=":material/lan:", url_path="edt")
-PG_MC = st.Page(pagina_montecarlo, title="Monte Carlo", icon=":material/query_stats:", url_path="montecarlo")
-PG_RIESGOS = st.Page(pagina_riesgos, title="Riesgos", icon=":material/gpp_maybe:", url_path="riesgos")
-PG_REPORTE = st.Page(pagina_reporte, title="Reporte Memento Mori", icon=":material/description:", url_path="reporte")
-PG_DESCARGAS = st.Page(pagina_descargas, title="Descarga completa", icon=":material/folder_zip:", url_path="descargas")
+def _envolver(funcion, clave):
+    """Registra la visita, dibuja la página y agrega los enlaces de paso anterior / siguiente."""
+    def _pagina():
+        marcar_visita(clave)
+        funcion()
+        pie_navegacion(clave)
+    _pagina.__name__ = f"pagina_{clave}"
+    return _pagina
+
+
+ICONOS_PAGINA = {
+    "requisitos": ":material/checklist:", "modelado": ":material/account_tree:", "flujos": ":material/route:",
+    "kanban": ":material/view_kanban:", "edt": ":material/lan:", "montecarlo": ":material/query_stats:",
+    "riesgos": ":material/gpp_maybe:", "reporte": ":material/description:", "descargas": ":material/folder_zip:",
+}
+FUNCIONES_PAGINA = {
+    "requisitos": pagina_requisitos, "modelado": pagina_modelado, "flujos": pagina_flujos, "kanban": pagina_gestion,
+    "edt": pagina_edt, "montecarlo": pagina_montecarlo, "riesgos": pagina_riesgos, "reporte": pagina_reporte,
+    "descargas": pagina_descargas,
+}
+
+PG_INICIO = st.Page(pagina_inicio, title="Inicio", icon=":material/home:", url_path="inicio", default=True)
+PAGINAS = {
+    clave: st.Page(_envolver(FUNCIONES_PAGINA[clave], clave), title=f"{n}. {titulo}", icon=ICONOS_PAGINA[clave], url_path=clave)
+    for n, (clave, titulo, *_resto) in enumerate(PASOS, 1)
+}
+PG_REQ, PG_MODELADO, PG_FLUJOS = PAGINAS["requisitos"], PAGINAS["modelado"], PAGINAS["flujos"]
+PG_KANBAN, PG_EDT, PG_MC, PG_RIESGOS = PAGINAS["kanban"], PAGINAS["edt"], PAGINAS["montecarlo"], PAGINAS["riesgos"]
+PG_REPORTE, PG_DESCARGAS = PAGINAS["reporte"], PAGINAS["descargas"]
 
 navegacion = st.navigation({
-    "Proyecto": [PG_INICIO],
-    "Definición": [PG_REQ, PG_MODELADO, PG_FLUJOS],
-    "Planificación": [PG_KANBAN, PG_EDT, PG_MC, PG_RIESGOS],
-    "Entregables": [PG_REPORTE, PG_DESCARGAS],
+    "Bienvenida": [PG_INICIO],
+    "Definición (pasos 1 a 3)": [PG_REQ, PG_MODELADO, PG_FLUJOS],
+    "Planificación (pasos 4 a 7)": [PG_KANBAN, PG_EDT, PG_MC, PG_RIESGOS],
+    "Entregables (pasos 8 y 9)": [PG_REPORTE, PG_DESCARGAS],
 })
 
 # Si el tema nativo cambió, se recarga la página actual una vez para que se aplique de inmediato
@@ -2183,12 +2453,29 @@ if aplicar_tema_nativo(T) and st.session_state.get("_tema_sincronizado") != st.s
     st.switch_page(navegacion)
 st.session_state._tema_sincronizado = st.session_state.tema
 
+def alternar_modo_oscuro():
+    st.session_state.tema = "claro" if st.session_state.tema in ("oscuro", "informatico") else "oscuro"
+
+
+# Botón colgante (fijo arriba a la derecha): luna para pasar a oscuro, sol para volver a claro
+es_oscuro = st.session_state.tema in ("oscuro", "informatico")
+st.button("", key="btn_luna", icon=":material/light_mode:" if es_oscuro else ":material/dark_mode:",
+          on_click=alternar_modo_oscuro, help="Volver al modo claro" if es_oscuro else "Cambiar a modo oscuro")
+
+for _clave, _pg in PAGINAS.items():
+    if _pg.url_path == navegacion.url_path:
+        marcar_visita(_clave)
+_estados, _hechos, _sig = avance_proyecto()
 with st.sidebar:
     html(f'<div class="mx-brand">{ico("hub", 22)}<div>MatrixDev<small>Gestión de proyectos de software</small></div></div>')
+    html(f'<div class="mx-sideprog"><div class="top"><span>Avance</span><b>{_hechos} de {len(PASOS)} pasos</b></div>'
+         f'<div class="mx-bar" style="--c:{T["accent"]};--w:{_hechos / len(PASOS) * 100:.1f}%;--m:101%"><div class="tr"><div class="fl"></div></div></div>'
+         + (f'<div class="nx">Siguiente: {_sig[0]}. {_sig[1][1]}</div>' if _sig else '<div class="nx">Todos los pasos completos</div>')
+         + '</div>')
     st.segmented_control("Tema", list(TEMAS.keys()), key="tema", format_func=lambda k: TEMAS[k]["icono"],
                          help="Claro (celeste y blanco), Oscuro (negro y blanco) o Informático (negro y rojo neón).")
     st.caption(f"Tema activo: {T['nombre']}")
-    if MC_ACTUAL:
+    if estado_paso("montecarlo")[0]:
         st.caption(f"Plazo P{MC_ACTUAL['cfg']['perc']}: {fmt_num(MC_ACTUAL['met']['pt'], 1)} días  |  "
                    f"Éxito conjunto: {fmt_num(MC_ACTUAL['met']['prob_ambos'], 1)}%")
 
