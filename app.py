@@ -1,149 +1,278 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-from streamlit_mermaid import st_mermaid
 import io
 import zipfile
-import openpyxl
+from datetime import date
 
-# Librerías de Estilos para Excel
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+import numpy as np
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+import streamlit as st
+from streamlit_mermaid import st_mermaid
+
+import openpyxl
+from openpyxl.chart import BarChart, LineChart, Reference
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-# Librerías para Word
 from docx import Document
 from docx.shared import Pt, RGBColor
 
-# ==========================================
-# 1. CONFIGURACIÓN DE PÁGINA Y TEMAS DINÁMICOS
-# ==========================================
-st.set_page_config(page_title="MatrixDev Tesis", layout="wide", page_icon="🍷")
+# =====================================================================
+# 1. CONFIGURACIÓN GENERAL
+# =====================================================================
+st.set_page_config(page_title="MatrixDev · Tesis", layout="wide", page_icon="🍷",
+                   initial_sidebar_state="expanded")
 
-# Inicialización del tema en session_state (Por defecto: Claro)
+
+def _version_streamlit():
+    try:
+        return tuple(int(p) for p in st.__version__.split(".")[:2])
+    except Exception:
+        return (1, 0)
+
+
+# Streamlit >= 1.50 reemplazó use_container_width por width="stretch"
+ANCHO = {"width": "stretch"} if _version_streamlit() >= (1, 50) else {"use_container_width": True}
+
+# ---------------------------------------------------------------------
+# Paletas de color por tema
+# ---------------------------------------------------------------------
+TEMAS = {
+    "claro": {
+        "nombre": "Claro", "bg": "#f5f6f8", "card": "#ffffff", "text": "#151a22", "sub": "#5b6472",
+        "accent": "#2453d6", "accent2": "#7c3aed", "border": "#e0e4ea", "grid": "#eceff3",
+        "input": "#ffffff", "ok": "#15955a", "warn": "#d48806", "bad": "#d1453b",
+    },
+    "oscuro": {
+        "nombre": "Gris oscuro", "bg": "#141518", "card": "#1c1e23", "text": "#eceef1", "sub": "#9aa1ad",
+        "accent": "#5aa9ff", "accent2": "#b794f6", "border": "#2c2f36", "grid": "#26292f",
+        "input": "#23262c", "ok": "#3ccf8e", "warn": "#f2b33d", "bad": "#ff6b5e",
+    },
+    "vino": {
+        "nombre": "Vino tinto", "bg": "#22090f", "card": "#2f1018", "text": "#f6eaec", "sub": "#c4a5ab",
+        "accent": "#eba2ab", "accent2": "#f3c98b", "border": "#4b1c27", "grid": "#3b1620",
+        "input": "#3a1520", "ok": "#7fd1a0", "warn": "#f0c06a", "bad": "#ff7f7f",
+    },
+}
+
 if "tema" not in st.session_state:
-    st.session_state.tema = "claro"  # Opciones: "vino", "oscuro", "claro"
+    st.session_state.tema = "claro"
+T = TEMAS.get(st.session_state.tema, TEMAS["claro"])
+FUENTE = "'IBM Plex Sans', 'Segoe UI', Helvetica, Arial, sans-serif"
 
-# Configuración de colores según el tema seleccionado
-if st.session_state.tema == "oscuro":
-    bg_color = "#18181b"
-    text_color = "#f4f4f5"
-    heading_color = "#38bdf8"
-    sub_color = "#a1a1aa"
-    btn_bg = "#27272a"
-    btn_border = "#3f3f46"
-    btn_hover = "#3f3f46"
-    graph_text = "#f4f4f5"
-    graph_bar = "#38bdf8"
-    grid_color = "#27272a"
-elif st.session_state.tema == "vino":
-    bg_color = "#2c0f14"
-    text_color = "#f4ecec"
-    heading_color = "#e09f9f"
-    sub_color = "#a68a8d"
-    btn_bg = "#5c1e28"
-    btn_border = "#8a2d3b"
-    btn_hover = "#8a2d3b"
-    graph_text = "#f4ecec"
-    graph_bar = "#e09f9f"
-    grid_color = "#442026"
-else:  # "claro" (Por defecto)
-    bg_color = "#ffffff"
-    text_color = "#0f172a"
-    heading_color = "#1d4ed8"
-    sub_color = "#475569"
-    btn_bg = "#f1f5f9"
-    btn_border = "#cbd5e1"
-    btn_hover = "#e2e8f0"
-    graph_text = "#0f172a"
-    graph_bar = "#2563eb"
-    grid_color = "#e2e8f0"
 
-# Inyección de CSS dinámico
+def rgba(hex_color, alpha):
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"rgba({r},{g},{b},{alpha})"
+
+
+# ---------------------------------------------------------------------
+# CSS global
+# ---------------------------------------------------------------------
 st.markdown(f"""
-    <style>
-    /* Fondo principal y color de texto global */
-    .stApp, .stAppHeader, [data-testid="stHeader"] {{
-        background-color: {bg_color} !important;
-        color: {text_color} !important;
-        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    }}
-    
-    /* Encabezados */
-    h1, h2, h3, h4, h5, h6 {{
-        color: {heading_color} !important;
-        font-weight: 300 !important;
-        text-align: center;
-    }}
-    
-    /* Pestañas (Tabs) */
-    .stTabs [data-baseweb="tab-list"] {{
-        gap: 8px;
-    }}
-    .stTabs [data-baseweb="tab-list"] button {{
-        background-color: transparent !important;
-        border-radius: 4px;
-        padding: 8px 16px;
-    }}
-    .stTabs [data-baseweb="tab-list"] button p {{
-        color: {sub_color} !important;
-        font-size: 1rem;
-        font-weight: 500;
-    }}
-    .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] p {{
-        color: {heading_color} !important;
-        font-weight: bold;
-    }}
-    .stTabs [data-baseweb="tab-highlight"] {{
-        background-color: {heading_color} !important;
-    }}
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap');
 
-    /* Textos generales, párrafos y etiquetas */
-    p, span, label, div, .stMarkdown {{
-        color: {text_color};
-    }}
+.stApp {{ background-color: {T['bg']} !important; color: {T['text']} !important; font-family: {FUENTE}; }}
+[data-testid="stHeader"] {{ background: transparent !important; }}
+#MainMenu, footer {{ visibility: hidden; }}
+.block-container {{ padding-top: 2.2rem; max-width: 1380px; }}
 
-    /* Inputs, Selects y Textareas */
-    div[data-baseweb="input"] > div, div[data-baseweb="select"] > div {{
-        background-color: {btn_bg} !important;
-        color: {text_color} !important;
-        border-color: {btn_border} !important;
-    }}
-    input, textarea {{
-        color: {text_color} !important;
-    }}
+p, span, label, div, li, .stMarkdown {{ color: {T['text']}; font-family: {FUENTE}; }}
+h1, h2, h3, h4, h5, h6 {{ color: {T['text']} !important; font-family: {FUENTE} !important; letter-spacing: -0.01em; }}
+h3 {{ font-weight: 600 !important; }}
+h4, h5 {{ font-weight: 600 !important; }}
+[data-testid="stCaptionContainer"] p, .stCaption {{ color: {T['sub']} !important; }}
 
-    /* Métricas */
-    [data-testid="stMetricValue"], [data-testid="stMetricLabel"] {{
-        color: {text_color} !important;
-    }}
+/* Sidebar */
+[data-testid="stSidebar"] {{ background-color: {T['card']} !important; border-right: 1px solid {T['border']}; }}
+[data-testid="stSidebar"] * {{ color: {T['text']}; }}
 
-    /* Botones */
-    .stButton>button, .stFormSubmitButton>button, .stDownloadButton>button {{
-        background-color: {btn_bg} !important;
-        color: {text_color} !important;
-        border: 1px solid {btn_border} !important;
-        border-radius: 8px;
-        transition: 0.3s;
-        font-weight: bold;
-    }}
-    .stButton>button:hover, .stFormSubmitButton>button:hover, .stDownloadButton>button:hover {{
-        background-color: {btn_hover} !important;
-        border-color: {heading_color} !important;
-        box-shadow: 0px 4px 10px rgba(0,0,0,0.2);
-    }}
+/* Tabs */
+.stTabs [data-baseweb="tab-list"] {{ gap: 4px; border-bottom: 1px solid {T['border']}; flex-wrap: wrap; }}
+.stTabs [data-baseweb="tab-list"] button {{ background: transparent !important; padding: 10px 14px; border-radius: 8px 8px 0 0; }}
+.stTabs [data-baseweb="tab-list"] button p {{ color: {T['sub']} !important; font-size: 0.95rem; font-weight: 500; }}
+.stTabs [data-baseweb="tab-list"] button:hover p {{ color: {T['text']} !important; }}
+.stTabs [data-baseweb="tab-list"] button[aria-selected="true"] p {{ color: {T['accent']} !important; font-weight: 600; }}
+.stTabs [data-baseweb="tab-highlight"] {{ background-color: {T['accent']} !important; height: 3px; }}
+.stTabs [data-baseweb="tab-border"] {{ display: none; }}
 
-    /* Ocultar elementos nativos innecesarios */
-    header {{visibility: hidden;}}
-    #MainMenu {{visibility: hidden;}}
-    footer {{visibility: hidden;}}
-    </style>
+/* Inputs */
+div[data-baseweb="input"] > div, div[data-baseweb="select"] > div, div[data-baseweb="textarea"] > div,
+div[data-baseweb="base-input"] {{ background-color: {T['input']} !important; border-color: {T['border']} !important; }}
+input, textarea {{ color: {T['text']} !important; background-color: {T['input']} !important; }}
+[data-baseweb="popover"] ul, [data-baseweb="popover"] li, [data-baseweb="menu"] {{ background-color: {T['input']} !important; color: {T['text']} !important; }}
+[data-testid="stNumberInput"] button {{ background-color: {T['input']} !important; border-color: {T['border']} !important; }}
+
+/* Métricas nativas */
+[data-testid="stMetric"] {{ background: {T['card']}; border: 1px solid {T['border']}; border-radius: 12px; padding: 14px 16px; }}
+[data-testid="stMetricValue"], [data-testid="stMetricLabel"] {{ color: {T['text']} !important; }}
+
+/* Botones */
+.stButton>button, .stFormSubmitButton>button, .stDownloadButton>button {{
+  background-color: {T['card']} !important; color: {T['text']} !important; border: 1px solid {T['border']} !important;
+  border-radius: 10px; font-weight: 600; transition: border-color .2s, background-color .2s;
+}}
+.stButton>button:hover, .stFormSubmitButton>button:hover, .stDownloadButton>button:hover {{
+  border-color: {T['accent']} !important; background-color: {rgba(T['accent'], 0.08)} !important;
+}}
+.stButton>button:focus-visible, .stDownloadButton>button:focus-visible {{ outline: 2px solid {T['accent']}; outline-offset: 2px; }}
+
+/* Contenedores, expanders, formularios */
+[data-testid="stExpander"] details {{ background: {T['card']}; border: 1px solid {T['border']} !important; border-radius: 12px; }}
+[data-testid="stForm"] {{ background: {T['card']}; border: 1px solid {T['border']} !important; border-radius: 12px; }}
+[data-testid="stVerticalBlockBorderWrapper"] {{ border-color: {T['border']} !important; border-radius: 14px !important; }}
+hr {{ border-color: {T['border']} !important; }}
+
+/* ---------- Componentes propios ---------- */
+.md-hero {{ display:flex; justify-content:space-between; align-items:flex-end; gap:24px; flex-wrap:wrap;
+  padding: 6px 0 18px 0; border-bottom: 1px solid {T['border']}; margin-bottom: 18px; }}
+.md-hero h1 {{ font-size: 2.3rem; font-weight: 700; margin: 0; padding: 0; line-height: 1.1; }}
+.md-hero .md-hero-sub {{ color: {T['sub']}; font-size: 1rem; margin-top: 6px; }}
+.md-hero .md-chip {{ border: 1px solid {T['border']}; background: {T['card']}; border-radius: 999px; padding: 6px 14px;
+  font-size: .9rem; color: {T['text']}; }}
+.md-hero .md-chip b {{ color: {T['accent']}; }}
+
+.md-sec {{ margin: 6px 0 14px 0; }}
+.md-sec .md-sec-t {{ font-size: 1.35rem; font-weight: 600; color: {T['text']}; }}
+.md-sec .md-sec-s {{ color: {T['sub']}; font-size: .95rem; margin-top: 2px; max-width: 80ch; }}
+
+.md-kpi {{ background: {T['card']}; border: 1px solid {T['border']}; border-radius: 14px; padding: 16px 18px;
+  border-left: 4px solid var(--c); height: 100%; }}
+.md-kpi .k-l {{ color: {T['sub']}; font-size: .85rem; font-weight: 500; }}
+.md-kpi .k-v {{ color: {T['text']}; font-size: 1.65rem; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }}
+.md-kpi .k-s {{ color: {T['sub']}; font-size: .83rem; margin-top: 2px; }}
+
+.md-verdict {{ display:flex; gap: 28px; align-items:center; justify-content:space-between; flex-wrap: wrap;
+  background: {T['card']}; border: 1px solid {T['border']}; border-radius: 16px; padding: 22px 26px;
+  border-top: 5px solid var(--c); }}
+.md-verdict .v-tag {{ display:inline-block; font-size:.85rem; font-weight:600; color: var(--c);
+  background: var(--cb); padding: 4px 12px; border-radius: 999px; }}
+.md-verdict .v-big {{ font-size: 1.5rem; font-weight: 600; margin: 10px 0 6px 0; color: {T['text']}; line-height: 1.3; max-width: 46ch; }}
+.md-verdict .v-big b {{ color: var(--c); }}
+.md-verdict .v-txt {{ color: {T['sub']}; font-size: .97rem; max-width: 70ch; line-height: 1.5; }}
+.md-verdict .v-txt b {{ color: {T['text']}; }}
+
+.dotwrap {{ display:flex; flex-direction:column; align-items:center; gap:10px; }}
+.dotgrid {{ display:grid; grid-template-columns: repeat(10, 13px); gap: 5px; }}
+.dot {{ width: 13px; height: 13px; border-radius: 50%; }}
+.dot.ok {{ background: {T['ok']}; }}
+.dot.mid {{ background: {T['warn']}; }}
+.dot.bad {{ background: {rgba(T['bad'], 0.85)}; }}
+.dotleg {{ display:flex; gap: 12px; font-size: .78rem; color: {T['sub']}; flex-wrap: wrap; justify-content:center; }}
+.dotleg span {{ color: {T['sub']}; }}
+.dotleg i {{ display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:4px; vertical-align: middle; }}
+
+.md-box {{ background: {T['card']}; border: 1px solid {T['border']}; border-radius: 14px; padding: 16px 18px; }}
+.md-box .b-t {{ font-weight: 600; font-size: 1rem; margin-bottom: 8px; color: {T['text']}; }}
+.md-row {{ display:flex; justify-content:space-between; padding: 7px 0; border-bottom: 1px dashed {T['border']}; font-size: .94rem; }}
+.md-row:last-child {{ border-bottom: none; }}
+.md-row .r-l {{ color: {T['sub']}; }}
+.md-row .r-v {{ color: {T['text']}; font-weight: 600; font-variant-numeric: tabular-nums; }}
+.pill {{ display:inline-block; padding: 2px 10px; border-radius: 999px; font-size: .8rem; font-weight: 600; }}
+.pill.ok {{ color: {T['ok']}; background: {rgba(T['ok'], 0.14)}; }}
+.pill.bad {{ color: {T['bad']}; background: {rgba(T['bad'], 0.14)}; }}
+.pill.warn {{ color: {T['warn']}; background: {rgba(T['warn'], 0.16)}; }}
+
+.md-answer {{ background: {rgba(T['accent'], 0.07)}; border: 1px solid {rgba(T['accent'], 0.25)}; border-radius: 12px;
+  padding: 12px 16px; font-size: 1rem; margin-top: 6px; }}
+.md-answer b {{ color: {T['accent']}; font-size: 1.15rem; }}
+
+.kb-col {{ background: {T['card']}; border: 1px solid {T['border']}; border-radius: 14px; padding: 12px; min-height: 120px; }}
+.kb-h {{ display:flex; justify-content:space-between; font-weight: 600; margin-bottom: 10px; }}
+.kb-h span.n {{ color: {T['sub']}; font-weight: 500; }}
+.kb-card {{ background: {T['bg']}; border: 1px solid {T['border']}; border-left: 3px solid var(--c); border-radius: 8px;
+  padding: 8px 10px; margin-bottom: 8px; font-size: .92rem; }}
+
+.md-step {{ display:flex; align-items:center; gap:10px; font-weight:600; font-size:1rem; margin: 2px 0 8px 0; }}
+.md-step .n {{ width: 26px; height: 26px; border-radius: 50%; display:inline-flex; align-items:center; justify-content:center;
+  background: {T['accent']}; color: {T['card']}; font-size: .85rem; }}
+</style>
 """, unsafe_allow_html=True)
 
-# ==========================================
-# 2. PLANTILLAS Y VARIABLES DE ESTADO
-# ==========================================
+
+# =====================================================================
+# 2. UTILIDADES DE FORMATO Y UI
+# =====================================================================
+def fmt_num(x, dec=0):
+    """Formato chileno: punto de miles y coma decimal."""
+    try:
+        s = f"{float(x):,.{dec}f}"
+    except (TypeError, ValueError):
+        return str(x)
+    return s.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def fmt_money(x):
+    return "$" + fmt_num(x, 0)
+
+
+def slug(texto):
+    return "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in str(texto).strip()) or "Proyecto"
+
+
+def seccion(titulo, subtitulo=""):
+    sub = f'<div class="md-sec-s">{subtitulo}</div>' if subtitulo else ""
+    st.markdown(f'<div class="md-sec"><div class="md-sec-t">{titulo}</div>{sub}</div>', unsafe_allow_html=True)
+
+
+def paso(numero, titulo):
+    st.markdown(f'<div class="md-step"><span class="n">{numero}</span>{titulo}</div>', unsafe_allow_html=True)
+
+
+def kpi(col, etiqueta, valor, sub="", color=None):
+    color = color or T["accent"]
+    col.markdown(
+        f'<div class="md-kpi" style="--c:{color}"><div class="k-l">{etiqueta}</div>'
+        f'<div class="k-v">{valor}</div><div class="k-s">{sub}</div></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def caja_filas(titulo, filas):
+    """filas: lista de (etiqueta, valor_html)"""
+    html = "".join(f'<div class="md-row"><span class="r-l">{l}</span><span class="r-v">{v}</span></div>' for l, v in filas)
+    return f'<div class="md-box"><div class="b-t">{titulo}</div>{html}</div>'
+
+
+def pill(texto, tipo):
+    return f'<span class="pill {tipo}">{texto}</span>'
+
+
+def limpiar_widgets(*prefijos):
+    """Evita que los widgets conserven valores de filas eliminadas."""
+    for k in list(st.session_state.keys()):
+        if any(str(k).startswith(p) for p in prefijos):
+            del st.session_state[k]
+
+
+def estilo_fig(fig, height=380, **kwargs):
+    base = dict(
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family=FUENTE, color=T["text"], size=13),
+        height=height, margin=dict(l=10, r=10, t=40, b=10),
+        hoverlabel=dict(bgcolor=T["card"], font_color=T["text"], bordercolor=T["border"]),
+        legend=dict(orientation="h", y=1.1, x=0, bgcolor="rgba(0,0,0,0)"),
+        separators=",.",
+    )
+    base.update(kwargs)
+    fig.update_layout(**base)
+    fig.update_xaxes(gridcolor=T["grid"], zeroline=False, linecolor=T["border"])
+    fig.update_yaxes(gridcolor=T["grid"], zeroline=False, linecolor=T["border"])
+    return fig
+
+
+PLOTLY_CFG = {"displaylogo": False, "modeBarButtonsToRemove": ["lasso2d", "select2d"]}
+
+
+def mostrar_fig(fig):
+    st.plotly_chart(fig, config=PLOTLY_CFG, **ANCHO)
+
+
+# =====================================================================
+# 3. PLANTILLAS Y ESTADO
+# =====================================================================
 PLANTILLAS_FLUJO = {
     "Autenticación": """graph TD
     A[Usuario] -->|Credenciales| B[API Login]
@@ -176,70 +305,48 @@ PLANTILLAS_FLUJO = {
     C -->|No| E[Resultado Fallo]"""
 }
 
-if "nombre_proj" not in st.session_state:
-    st.session_state.nombre_proj = "MatrixDev Core"
-if "integrantes" not in st.session_state:
-    st.session_state.integrantes = "Juan Pérez"
-if "objetivo_text" not in st.session_state:
-    st.session_state.objetivo_text = "Automatizar el flujo de inventario con una arquitectura minimalista."
-
-# Listas de datos
-if "rf_list" not in st.session_state:
-    st.session_state.rf_list = ["Autenticación OAuth2.", "CRUD de usuarios."]
-if "rnf_list" not in st.session_state:
-    st.session_state.rnf_list = ["Latencia < 200ms.", "Cifrado AES-256 en base de datos."]
-if "kanban_tasks" not in st.session_state:
-    st.session_state.kanban_tasks = [
+DEFAULTS = {
+    "nombre_proj": "MatrixDev Core",
+    "integrantes": "Juan Pérez",
+    "objetivo_text": "Automatizar el flujo de inventario con una arquitectura minimalista.",
+    "rf_list": ["Autenticación OAuth2.", "CRUD de usuarios."],
+    "rnf_list": ["Latencia < 200ms.", "Cifrado AES-256 en base de datos."],
+    "kanban_tasks": [
         {"Tarea": "Modelo BD", "Estado": "Completado"},
-        {"Tarea": "Endpoints API", "Estado": "En Proceso"}
-    ]
-
-# Estructura jerárquica multinivel para la EDT
-if "edt_list" not in st.session_state:
-    st.session_state.edt_list = [
-        {
-            "Fase": "Fase 1: Preparación",
-            "Subfase": "Limpieza y Despeje",
-            "Paquete": "Despejar Habitación y Muebles",
-            "Horas": 5,
-            "Costo": 20000,
-            "Documentos": "Plan de Trabajo"
-        },
-        {
-            "Fase": "Fase 1: Preparación",
-            "Subfase": "Pintura Aerosol",
-            "Paquete": "Pintar Arbusto / Detalles",
-            "Horas": 4,
-            "Costo": 35000,
-            "Documentos": "Ficha Técnica Aerosol"
-        },
-        {
-            "Fase": "Fase 2: Aplicación Manual",
-            "Subfase": "Capas de Pintura",
-            "Paquete": "Mano de Pintura Muros (1 y 2)",
-            "Horas": 16,
-            "Costo": 80000,
-            "Documentos": "Guía de Pintado Manual"
-        },
-        {
-            "Fase": "Fase 2: Aplicación Manual",
-            "Subfase": "Documentación y Entrega",
-            "Paquete": "Informe de Inspección y Cotizaciones",
-            "Horas": 6,
-            "Costo": 15000,
-            "Documentos": "Cotización + Certificados"
-        }
-    ]
-
-if "riesgos_list" not in st.session_state:
-    st.session_state.riesgos_list = [
+        {"Tarea": "Endpoints API", "Estado": "En Proceso"},
+    ],
+    "edt_list": [
+        {"Fase": "Fase 1: Preparación", "Subfase": "Limpieza y Despeje", "Paquete": "Despejar Habitación y Muebles",
+         "Horas": 5, "Costo": 20000, "Documentos": "Plan de Trabajo"},
+        {"Fase": "Fase 1: Preparación", "Subfase": "Pintura Aerosol", "Paquete": "Pintar Arbusto / Detalles",
+         "Horas": 4, "Costo": 35000, "Documentos": "Ficha Técnica Aerosol"},
+        {"Fase": "Fase 2: Aplicación Manual", "Subfase": "Capas de Pintura", "Paquete": "Mano de Pintura Muros (1 y 2)",
+         "Horas": 16, "Costo": 80000, "Documentos": "Guía de Pintado Manual"},
+        {"Fase": "Fase 2: Aplicación Manual", "Subfase": "Documentación y Entrega",
+         "Paquete": "Informe de Inspección y Cotizaciones", "Horas": 6, "Costo": 15000,
+         "Documentos": "Cotización + Certificados"},
+    ],
+    "riesgos_list": [
         {"Riesgo": "Retraso en entrega API", "Probabilidad": 3, "Impacto": 4},
         {"Riesgo": "Falla en servidor cloud", "Probabilidad": 2, "Impacto": 5},
-        {"Riesgo": "Incompatibilidad de navegador", "Probabilidad": 1, "Impacto": 2}
-    ]
+        {"Riesgo": "Incompatibilidad de navegador", "Probabilidad": 1, "Impacto": 2},
+    ],
+    "flujo_codigo": PLANTILLAS_FLUJO["Autenticación"],
+    "modelo_mermaid": """graph TD
+    A[Inicio] --> B{Validar}
+    B -->|Sí| C[Éxito]
+    B -->|No| D[Error]""",
+    "mc_semilla_val": 42,
+}
+for k, v in DEFAULTS.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
 
-if "flujo_codigo" not in st.session_state:
-    st.session_state.flujo_codigo = PLANTILLAS_FLUJO["Autenticación"]
+ESTADOS_KANBAN = ["Pendiente", "En Proceso", "Completado"]
+
+# Resultado vigente de Monte Carlo (lo rellena la pestaña 4 y lo leen los reportes)
+MC_ACTUAL = None
+
 
 def cambiar_plantilla_flujo():
     sel = st.session_state.select_tipo_flujo
@@ -247,68 +354,46 @@ def cambiar_plantilla_flujo():
         st.session_state.flujo_codigo = PLANTILLAS_FLUJO[sel]
         st.session_state.txt_flujo_code = PLANTILLAS_FLUJO[sel]
 
+
 def generar_mermaid_edt(edt_items, nombre_proyecto):
-    proj_name = str(nombre_proyecto).replace('"', '').replace("'", "").replace("$", "")
-    lines = ["graph TD", f'    ROOT["📦 {proj_name}"]']
-    
+    def limpio(x):
+        return str(x).strip().replace('"', '').replace("'", "").replace("$", "")
+
+    lines = ["graph TD", f'    ROOT["📦 {limpio(nombre_proyecto)}"]']
     fases = {}
     for item in edt_items:
-        fase = str(item.get("Fase", "Sin Fase")).strip().replace('"', '').replace("'", "")
-        subfase = str(item.get("Subfase", "")).strip().replace('"', '').replace("'", "")
-        paquete = str(item.get("Paquete", "Tarea")).strip().replace('"', '').replace("'", "")
-        horas = float(item.get("Horas", 0))
-        costo = float(item.get("Costo", 0))
-        doc = str(item.get("Documentos", "")).strip().replace('"', '').replace("'", "")
-        
-        if fase not in fases:
-            fases[fase] = {}
-        if subfase not in fases[fase]:
-            fases[fase][subfase] = []
-        
-        fases[fase][subfase].append({
-            "paquete": paquete,
-            "horas": horas,
-            "costo": costo,
-            "doc": doc
+        fase = limpio(item.get("Fase", "Sin Fase")) or "Sin Fase"
+        subfase = limpio(item.get("Subfase", ""))
+        fases.setdefault(fase, {}).setdefault(subfase, []).append({
+            "paquete": limpio(item.get("Paquete", "Tarea")),
+            "horas": float(item.get("Horas", 0) or 0),
+            "costo": float(item.get("Costo", 0) or 0),
+            "doc": limpio(item.get("Documentos", "")),
         })
 
-    fase_idx = 0
-    for fase_name, subfases in fases.items():
+    for fase_idx, (fase_name, subfases) in enumerate(fases.items()):
         fase_id = f"F{fase_idx}"
-        
-        total_fase_hrs = sum(pkg["horas"] for sub in subfases.values() for pkg in sub)
-        total_fase_cost = sum(pkg["costo"] for sub in subfases.values() for pkg in sub)
-        
-        fase_label = f"📂 {fase_name}<br/><i>Total: {total_fase_hrs:.0f}h | ${total_fase_cost:,.0f}</i>"
-        lines.append(f'    ROOT --> {fase_id}["{fase_label}"]')
-        
-        sub_idx = 0
-        for sub_name, pkgs in subfases.items():
+        t_h = sum(p["horas"] for s in subfases.values() for p in s)
+        t_c = sum(p["costo"] for s in subfases.values() for p in s)
+        lines.append(f'    ROOT --> {fase_id}["📂 {fase_name}<br/><i>Total: {t_h:.0f}h | ${fmt_num(t_c)}</i>"]')
+        for sub_idx, (sub_name, pkgs) in enumerate(subfases.items()):
             if sub_name:
                 sub_id = f"{fase_id}_S{sub_idx}"
-                sub_hrs = sum(pkg["horas"] for pkg in pkgs)
-                sub_cost = sum(pkg["costo"] for pkg in pkgs)
-                sub_label = f"📁 {sub_name}<br/><i>{sub_hrs:.0f}h | ${sub_cost:,.0f}</i>"
-                lines.append(f'    {fase_id} --> {sub_id}["{sub_label}"]')
-                parent_id = sub_id
+                s_h = sum(p["horas"] for p in pkgs)
+                s_c = sum(p["costo"] for p in pkgs)
+                lines.append(f'    {fase_id} --> {sub_id}["📁 {sub_name}<br/><i>{s_h:.0f}h | ${fmt_num(s_c)}</i>"]')
+                parent = sub_id
             else:
-                parent_id = fase_id
-            
+                parent = fase_id
             for pkg_idx, pkg in enumerate(pkgs):
-                pkg_id = f"{parent_id}_P{pkg_idx}"
-                details = [f"⏱️ {pkg['horas']:.0f} hrs"]
-                if pkg['costo'] > 0:
-                    details.append(f"💰 ${pkg['costo']:,.0f}")
-                if pkg['doc']:
-                    details.append(f"📄 {pkg['doc']}")
-                
-                details_str = "<br/>".join(details)
-                lines.append(f'    {parent_id} --> {pkg_id}["<b>{pkg["paquete"]}</b><br/>{details_str}"]')
-            
-            sub_idx += 1
-        fase_idx += 1
-
+                det = [f"⏱️ {pkg['horas']:.0f} hrs"]
+                if pkg["costo"] > 0:
+                    det.append(f"💰 ${fmt_num(pkg['costo'])}")
+                if pkg["doc"]:
+                    det.append(f"📄 {pkg['doc']}")
+                lines.append(f'    {parent} --> {parent}_P{pkg_idx}["<b>{pkg["paquete"]}</b><br/>{"<br/>".join(det)}"]')
     return "\n".join(lines)
+
 
 def clasificar_riesgo(sev):
     if sev <= 5:
@@ -317,1560 +402,1506 @@ def clasificar_riesgo(sev):
         return "Medio 🟡"
     elif sev <= 15:
         return "Alto 🟠"
+    return "Crítico 🔴"
+
+
+# =====================================================================
+# 4. MOTOR MONTE CARLO
+# =====================================================================
+DISTRIBUCIONES = ["Beta-PERT", "Triangular", "Normal", "Uniforme"]
+NIVELES_PERCENTIL = [10, 25, 50, 75, 80, 85, 90, 95, 99]
+
+
+def _muestra(rng, dist, a, m, b, n):
+    """Genera n muestras de una distribución de tres puntos (a=mín, m=más probable, b=máx)."""
+    if b <= a:
+        return np.full(n, float(m))
+    if dist == "Triangular":
+        return rng.triangular(a, min(max(m, a), b), b, n)
+    if dist == "Uniforme":
+        return rng.uniform(a, b, n)
+    if dist == "Normal":
+        media = (a + 4 * m + b) / 6
+        desv = (b - a) / 6
+        return np.maximum(rng.normal(media, desv, n), a * 0.5)
+    # Beta-PERT (PMBOK)
+    alfa = 1 + 4 * (m - a) / (b - a)
+    beta = 1 + 4 * (b - m) / (b - a)
+    return a + rng.beta(alfa, beta, n) * (b - a)
+
+
+@st.cache_data(show_spinner=False, max_entries=24)
+def simular_manual(dist, p1, p2, p3, n, costo_fijo, costo_diario, var_costo_pct, seed):
+    rng = np.random.default_rng(seed)
+    if dist == "Normal":  # p1 = media, p2 = desviación
+        dias = np.maximum(rng.normal(p1, p2, n), 0.5)
+    elif dist == "Uniforme":  # p1 = mín, p3 = máx
+        dias = rng.uniform(p1, p3, n)
     else:
-        return "Crítico 🔴"
+        dias = _muestra(rng, dist, p1, p2, p3, n)
+    factor = np.maximum(rng.normal(1.0, var_costo_pct / 100.0, n), 0.0)
+    costos = costo_fijo + dias * costo_diario * factor
+    return {"dias": dias, "costos": costos, "componentes": None, "nombres": None}
 
-# ==========================================
-# 3. FUNCIONES DE GENERACIÓN DE DOCUMENTOS INDIVIDUALES
-# ==========================================
 
-# 3.1 Requisitos Excel
+@st.cache_data(show_spinner=False, max_entries=24)
+def simular_edt(paquetes, horas_dia, pct_opt, pct_pes, dist, n, costo_fijo, seed):
+    """Cada paquete de la EDT se simula por separado y se suman (ejecución secuencial)."""
+    rng = np.random.default_rng(seed)
+    nombres = [p[0] for p in paquetes]
+    comp = np.zeros((n, len(paquetes)))
+    costos = np.full(n, float(costo_fijo))
+    for j, (_, horas, costo) in enumerate(paquetes):
+        m = max(float(horas), 0.0) / horas_dia
+        if m <= 0:
+            continue
+        a, b = m * (1 - pct_opt / 100.0), m * (1 + pct_pes / 100.0)
+        s = _muestra(rng, dist, a, m, b, n)
+        comp[:, j] = s
+        costos += float(costo) * (s / m)  # el costo escala con el esfuerzo real
+    return {"dias": comp.sum(axis=1), "costos": costos, "componentes": comp, "nombres": nombres}
+
+
+def calcular_metricas(dias, costos, dias_meta, costo_meta, perc):
+    ok_t = dias <= dias_meta
+    ok_c = costos <= costo_meta
+    m = {
+        "n": int(len(dias)),
+        "media": float(np.mean(dias)), "desv": float(np.std(dias)),
+        "min": float(np.min(dias)), "max": float(np.max(dias)),
+        "p50": float(np.percentile(dias, 50)), "pt": float(np.percentile(dias, perc)),
+        "p95": float(np.percentile(dias, 95)),
+        "p50c": float(np.percentile(costos, 50)), "ptc": float(np.percentile(costos, perc)),
+        "p95c": float(np.percentile(costos, 95)), "media_c": float(np.mean(costos)),
+        "prob_t": float(ok_t.mean() * 100), "prob_c": float(ok_c.mean() * 100),
+        "prob_ambos": float((ok_t & ok_c).mean() * 100),
+        "prob_uno": float((ok_t ^ ok_c).mean() * 100),
+    }
+    m["prob_ninguno"] = 100 - m["prob_ambos"] - m["prob_uno"]
+    m["riesgo_t"] = 100 - m["prob_t"]
+    m["reserva_dias"] = m["pt"] - m["p50"]
+    m["reserva_costo"] = m["ptc"] - m["p50c"]
+    m["cv"] = m["desv"] / m["media"] * 100 if m["media"] else 0
+    return m
+
+
+def fecha_fin(inicio, dias, habiles):
+    d = int(np.ceil(max(float(dias), 0)))
+    if habiles:
+        return pd.Timestamp(np.busday_offset(np.datetime64(inicio, "D"), d, roll="forward"))
+    return pd.Timestamp(inicio) + pd.Timedelta(days=d)
+
+
+def tabla_percentiles(dias, costos, inicio, habiles, perc):
+    niveles = sorted(set(NIVELES_PERCENTIL + [int(perc)]))
+    filas = []
+    for p in niveles:
+        d = float(np.percentile(dias, p))
+        c = float(np.percentile(costos, p))
+        filas.append({"Confianza": f"P{p}", "p": p, "Días": d, "Fecha": fecha_fin(inicio, d, habiles), "Costo": c})
+    return filas
+
+
+def veredicto(met, perc):
+    pa = met["prob_ambos"]
+    if pa >= perc:
+        return "ok", "Viable con la confianza exigida"
+    if pa >= 50:
+        return "warn", "Viable, con riesgo moderado"
+    return "bad", "Alto riesgo de incumplimiento"
+
+
+# =====================================================================
+# 5. GENERACIÓN DE DOCUMENTOS (EXCEL / WORD)
+# =====================================================================
+XL_NAVY, XL_ACC = "1E3A8A", "2563EB"
+XL_ZEBRA, XL_SOFT = "F1F5F9", "F8FAFC"
+XL_OK, XL_BAD, XL_HL = "DCFCE7", "FEE2E2", "FEF3C7"
+XL_BORDE = Border(*(Side(style="thin", color="E2E8F0") for _ in range(4)))
+
+
+def _xl_titulo(ws, texto, ncols):
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=max(ncols, 2))
+    c = ws.cell(row=1, column=1, value=texto)
+    c.font = Font(name="Calibri", size=14, bold=True, color="FFFFFF")
+    c.fill = PatternFill("solid", start_color=XL_NAVY, end_color=XL_NAVY)
+    c.alignment = Alignment(horizontal="left", vertical="center", indent=1)
+    ws.row_dimensions[1].height = 32
+
+
+def _xl_meta(ws, fila, pares):
+    for etiqueta, valor in pares:
+        a = ws.cell(row=fila, column=1, value=etiqueta)
+        b = ws.cell(row=fila, column=2, value=valor)
+        a.font = Font(name="Calibri", bold=True, color="0F172A")
+        a.fill = PatternFill("solid", start_color=XL_SOFT, end_color=XL_SOFT)
+        b.font = Font(name="Calibri", color="334155")
+        a.border = b.border = XL_BORDE
+        fila += 1
+    return fila
+
+
+def _xl_tabla(ws, fila, encabezados, filas, formatos=None, resaltar=None):
+    """Escribe una tabla con estilo. formatos: {col_idx(1-based): number_format}. Devuelve la siguiente fila libre."""
+    formatos = formatos or {}
+    for j, h in enumerate(encabezados, 1):
+        c = ws.cell(row=fila, column=j, value=h)
+        c.font = Font(name="Calibri", bold=True, color="FFFFFF")
+        c.fill = PatternFill("solid", start_color=XL_ACC, end_color=XL_ACC)
+        c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        c.border = XL_BORDE
+    ws.row_dimensions[fila].height = 24
+    for i, f in enumerate(filas):
+        r = fila + 1 + i
+        for j, v in enumerate(f, 1):
+            c = ws.cell(row=r, column=j, value=v)
+            c.font = Font(name="Calibri", color="334155")
+            c.border = XL_BORDE
+            if j in formatos:
+                c.number_format = formatos[j]
+            if isinstance(v, (int, float)):
+                c.alignment = Alignment(horizontal="right")
+            if resaltar is not None and resaltar(i, f):
+                c.fill = PatternFill("solid", start_color=XL_HL, end_color=XL_HL)
+                c.font = Font(name="Calibri", bold=True, color="0F172A")
+            elif i % 2 == 1:
+                c.fill = PatternFill("solid", start_color=XL_ZEBRA, end_color=XL_ZEBRA)
+    return fila + len(filas) + 1
+
+
+def _xl_autofit(ws, minimo=12, maximo=70):
+    anchos = {}
+    for row in ws.iter_rows(min_row=2):
+        for c in row:
+            if c.value is None:
+                continue
+            v = c.value
+            if isinstance(v, float) and "%" in (c.number_format or ""):
+                txt = f"{v * 100:.1f}%"
+            elif isinstance(v, (int, float)) and "$" in (c.number_format or ""):
+                txt = f"${v:,.0f}"
+            elif isinstance(v, float):
+                txt = f"{v:,.2f}"
+            else:
+                txt = str(v)
+            anchos[c.column_letter] = max(anchos.get(c.column_letter, 0), len(txt))
+    for col, w in anchos.items():
+        ws.column_dimensions[col].width = min(max(w + 4, minimo), maximo)
+
+
+def _xl_bytes(wb):
+    out = io.BytesIO()
+    wb.save(out)
+    return out.getvalue()
+
+
+def _filas_requisitos():
+    filas = [[f"RF-{i:02d}", "Funcional", t.strip()] for i, t in enumerate(st.session_state.rf_list, 1) if t.strip()]
+    filas += [[f"RNF-{i:02d}", "No funcional", t.strip()] for i, t in enumerate(st.session_state.rnf_list, 1) if t.strip()]
+    return filas
+
+
+def _filas_riesgos():
+    filas = []
+    for r in st.session_state.riesgos_list:
+        p, i = int(r.get("Probabilidad", 1)), int(r.get("Impacto", 1))
+        filas.append([r.get("Riesgo", ""), p, i, p * i, clasificar_riesgo(p * i)])
+    return filas
+
+
+def _filas_edt():
+    return [[e.get("Fase", ""), e.get("Subfase", ""), e.get("Paquete", ""), float(e.get("Horas", 0) or 0),
+             float(e.get("Costo", 0) or 0), e.get("Documentos", "")] for e in st.session_state.edt_list]
+
+
+ENC_EDT = ["Fase principal", "Subfase / grupo", "Paquete de trabajo", "Horas estimadas", "Costo estimado ($)", "Documentos"]
+
+
 def generar_excel_requisitos():
-    output = io.BytesIO()
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Requisitos"
-    ws.views.sheetView[0].showGridLines = True
-    
-    ws.append(["Proyecto:", st.session_state.nombre_proj])
-    ws.append(["Objetivo:", st.session_state.objetivo_text])
-    ws.append([])
-    ws.append(["Código", "Tipo de Requisito", "Descripción"])
-    
-    for idx, rf in enumerate(st.session_state.rf_list, 1):
-        if rf.strip():
-            ws.append([f"RF-{idx:02d}", "Funcional", rf.strip()])
-            
-    for idx, rnf in enumerate(st.session_state.rnf_list, 1):
-        if rnf.strip():
-            ws.append([f"RNF-{idx:02d}", "No Funcional", rnf.strip()])
+    _xl_titulo(ws, f"Matriz de requisitos · {st.session_state.nombre_proj}", 3)
+    f = _xl_meta(ws, 3, [("Proyecto", st.session_state.nombre_proj), ("Objetivo", st.session_state.objetivo_text)])
+    _xl_tabla(ws, f + 1, ["Código", "Tipo de requisito", "Descripción"], _filas_requisitos())
+    ws.freeze_panes = ws.cell(row=f + 2, column=1)
+    _xl_autofit(ws)
+    return _xl_bytes(wb)
 
-    for col in ws.columns:
-        max_len = max(len(str(cell.value or '')) for cell in col)
-        col_letter = get_column_letter(col[0].column)
-        ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
-            
-    wb.save(output)
-    return output.getvalue()
 
-# 3.2 Kanban Excel
 def generar_excel_kanban():
-    output = io.BytesIO()
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Tablero Kanban"
-    ws.views.sheetView[0].showGridLines = True
-    
-    ws.append(["Proyecto:", st.session_state.nombre_proj])
-    ws.append([])
-    ws.append(["N°", "Tarea", "Estado"])
-    
-    for idx, k in enumerate(st.session_state.kanban_tasks, 1):
-        ws.append([idx, k["Tarea"], k["Estado"]])
+    _xl_titulo(ws, f"Tablero Kanban · {st.session_state.nombre_proj}", 3)
+    filas = [[i, t["Tarea"], t["Estado"]] for i, t in enumerate(st.session_state.kanban_tasks, 1)]
+    _xl_tabla(ws, 3, ["N°", "Tarea", "Estado"], filas)
+    ws.freeze_panes = "A4"
+    _xl_autofit(ws)
+    return _xl_bytes(wb)
 
-    for col in ws.columns:
-        max_len = max(len(str(cell.value or '')) for cell in col)
-        col_letter = get_column_letter(col[0].column)
-        ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
-        
-    wb.save(output)
-    return output.getvalue()
 
-# 3.3 MONTE CARLO EXCEL ALTAMENTE ESTILIZADO Y DINÁMICO
-def generar_excel_montecarlo(datos_dias, datos_costos=None):
-    output = io.BytesIO()
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Simulación Monte Carlo"
-    ws.views.sheetView[0].showGridLines = True
-
-    # 🎨 ESTILOS DE CORTE EJECUTIVO / MINIMALISTA
-    HEADER_MAIN_FILL = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid")  # Azul Marino
-    SUBHEADER_FILL = PatternFill(start_color="2563EB", end_color="2563EB", fill_type="solid")   # Azul Acento
-    ACCENT_BG_FILL = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")   # Gris ultra claro
-    ZEBRA_FILL = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")       # Gris alternado
-    
-    SUCCESS_FILL = PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid")     # Verde suave
-    WARNING_FILL = PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid")     # Rojo suave
-
-    FONT_TITLE = Font(name="Calibri", size=14, bold=True, color="FFFFFF")
-    FONT_HEADER = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
-    FONT_BOLD = Font(name="Calibri", size=11, bold=True, color="0F172A")
-    FONT_REGULAR = Font(name="Calibri", size=11, color="334155")
-
-    ALIGN_LEFT = Alignment(horizontal="left", vertical="center")
-    ALIGN_RIGHT = Alignment(horizontal="right", vertical="center")
-    ALIGN_CENTER = Alignment(horizontal="center", vertical="center")
-
-    THIN_BORDER = Border(
-        left=Side(style='thin', color='E2E8F0'),
-        right=Side(style='thin', color='E2E8F0'),
-        top=Side(style='thin', color='E2E8F0'),
-        bottom=Side(style='thin', color='E2E8F0')
-    )
-
-    # 1. TÍTULO Y LOGO/BANNER
-    ws.merge_cells("A1:C1")
-    title_cell = ws["A1"]
-    title_cell.value = f"📊 REPORTE DE SIMULACIÓN MONTE CARLO: {st.session_state.nombre_proj.upper()}"
-    title_cell.font = FONT_TITLE
-    title_cell.fill = HEADER_MAIN_FILL
-    title_cell.alignment = ALIGN_CENTER
-    ws.row_dimensions[1].height = 35
-
-    # 2. PARÁMETROS CONFIGURADOS
-    dist_name = st.session_state.get("mc_dist_type", "Triangular")
-    dias_meta = st.session_state.get("mc_dias_meta", 25)
-    costo_meta = st.session_state.get("mc_costo_meta", 500000)
-    percentil_target = st.session_state.get("mc_target_perc", 85)
-
-    params = [
-        ("Proyecto:", st.session_state.nombre_proj),
-        ("Modelo de Distribución Usado:", dist_name),
-        ("Días Meta (SLA Tiempo):", dias_meta),
-        ("Presupuesto Meta (SLA Costo):", costo_meta),
-        ("Muestras Simuladas (Iteraciones):", len(datos_dias))
-    ]
-
-    ws.cell(row=3, column=1, value="PARÁMETROS DEL PROYECTO Y CONFIGURACIÓN").font = FONT_BOLD
-    ws.merge_cells("A3:C3")
-    ws.row_dimensions[3].height = 22
-
-    r = 4
-    for label, val in params:
-        c1 = ws.cell(row=r, column=1, value=label)
-        c2 = ws.cell(row=r, column=2, value=val)
-        c3 = ws.cell(row=r, column=3, value="")
-
-        c1.font = FONT_BOLD
-        c2.font = FONT_REGULAR
-        c1.fill = ACCENT_BG_FILL
-        
-        c1.border = THIN_BORDER
-        c2.border = THIN_BORDER
-        c3.border = THIN_BORDER
-
-        if isinstance(val, (int, float)):
-            if "Presupuesto" in label:
-                c2.number_format = "$#,##0"
-            else:
-                c2.number_format = "#,##0"
-            c2.alignment = ALIGN_RIGHT
-        else:
-            c2.alignment = ALIGN_LEFT
-
-        ws.row_dimensions[r].height = 20
-        r += 1
-
-    # 3. SECCIÓN 1: MÉTRICAS DE TIEMPO
-    r += 1
-    ws.cell(row=r, column=1, value="Métrica de Tiempo / SLA").font = FONT_HEADER
-    ws.cell(row=r, column=1).fill = SUBHEADER_FILL
-    ws.cell(row=r, column=2, value="Valor Estimado").font = FONT_HEADER
-    ws.cell(row=r, column=2).fill = SUBHEADER_FILL
-    ws.cell(row=r, column=3, value="Unidad / Formato").font = FONT_HEADER
-    ws.cell(row=r, column=3).fill = SUBHEADER_FILL
-    ws.row_dimensions[r].height = 25
-    r += 1
-
-    p50_dias = np.percentile(datos_dias, 50)
-    p_target_dias = np.percentile(datos_dias, percentil_target)
-    p95_dias = np.percentile(datos_dias, 95)
-
-    exitos_dias = (datos_dias <= dias_meta).sum()
-    tasa_exito_dias = (exitos_dias / len(datos_dias))
-    riesgo_retraso = 1.0 - tasa_exito_dias
-    capacidad_anual = (365 / p_target_dias) if p_target_dias > 0 else 0
-
-    time_metrics = [
-        ("Percentil 50 (P50 - Mediana Esperada)", p50_dias, "Días", "0.0"),
-        (f"Percentil Objetivo (P{percentil_target} - Compromiso Seguros)", p_target_dias, "Días", "0.0"),
-        ("Percentil 95 (P95 - Escenario Pesimista)", p95_dias, "Días", "0.0"),
-        ("Tasa de Éxito en Tiempo", tasa_exito_dias, "Porcentaje", "0.0%"),
-        ("Riesgo de Retraso", riesgo_retraso, "Porcentaje", "0.0%"),
-        ("Capacidad Anual Proyectada", capacidad_anual, "Proyectos / Año", "0.0")
-    ]
-
-    for idx, (label, val, unit, num_fmt) in enumerate(time_metrics):
-        c1 = ws.cell(row=r, column=1, value=label)
-        c2 = ws.cell(row=r, column=2, value=val)
-        c3 = ws.cell(row=r, column=3, value=unit)
-
-        c1.font = FONT_REGULAR
-        c2.font = FONT_BOLD if ("Objetivo" in label or "Éxito" in label) else FONT_REGULAR
-        c3.font = FONT_REGULAR
-
-        c1.border = THIN_BORDER
-        c2.border = THIN_BORDER
-        c3.border = THIN_BORDER
-
-        c2.number_format = num_fmt
-        c2.alignment = ALIGN_RIGHT
-        c3.alignment = ALIGN_CENTER
-
-        if idx % 2 == 1:
-            c1.fill = ZEBRA_FILL
-            c2.fill = ZEBRA_FILL
-            c3.fill = ZEBRA_FILL
-
-        if "Tasa de Éxito" in label:
-            if tasa_exito_dias >= 0.8:
-                c2.fill = SUCCESS_FILL
-            elif tasa_exito_dias < 0.5:
-                c2.fill = WARNING_FILL
-        elif "Riesgo de Retraso" in label:
-            if riesgo_retraso >= 0.5:
-                c2.fill = WARNING_FILL
-
-        ws.row_dimensions[r].height = 20
-        r += 1
-
-    # 4. SECCIÓN 2: MÉTRICAS FINANCIERAS / COSTOS
-    if datos_costos is not None:
-        r += 1
-        ws.cell(row=r, column=1, value="Métrica Financiera / Costos").font = FONT_HEADER
-        ws.cell(row=r, column=1).fill = SUBHEADER_FILL
-        ws.cell(row=r, column=2, value="Valor Estimado ($)").font = FONT_HEADER
-        ws.cell(row=r, column=2).fill = SUBHEADER_FILL
-        ws.cell(row=r, column=3, value="Unidad / Formato").font = FONT_HEADER
-        ws.cell(row=r, column=3).fill = SUBHEADER_FILL
-        ws.row_dimensions[r].height = 25
-        r += 1
-
-        p50_cost = np.percentile(datos_costos, 50)
-        p_target_cost = np.percentile(datos_costos, percentil_target)
-        p95_cost = np.percentile(datos_costos, 95)
-        exitos_cost = (datos_costos <= costo_meta).sum()
-        tasa_exito_cost = (exitos_cost / len(datos_costos))
-
-        cost_metrics = [
-            ("Costo Mediano (P50)", p50_cost, "Moneda ($)", "$#,##0"),
-            (f"Costo Recomendado (P{percentil_target})", p_target_cost, "Moneda ($)", "$#,##0"),
-            ("Costo Pesimista (P95)", p95_cost, "Moneda ($)", "$#,##0"),
-            ("Tasa de Éxito Presupuestario", tasa_exito_cost, "Porcentaje", "0.0%")
-        ]
-
-        for idx, (label, val, unit, num_fmt) in enumerate(cost_metrics):
-            c1 = ws.cell(row=r, column=1, value=label)
-            c2 = ws.cell(row=r, column=2, value=val)
-            c3 = ws.cell(row=r, column=3, value=unit)
-
-            c1.font = FONT_REGULAR
-            c2.font = FONT_BOLD if ("Recomendado" in label or "Éxito" in label) else FONT_REGULAR
-            c3.font = FONT_REGULAR
-
-            c1.border = THIN_BORDER
-            c2.border = THIN_BORDER
-            c3.border = THIN_BORDER
-
-            c2.number_format = num_fmt
-            c2.alignment = ALIGN_RIGHT
-            c3.alignment = ALIGN_CENTER
-
-            if idx % 2 == 1:
-                c1.fill = ZEBRA_FILL
-                c2.fill = ZEBRA_FILL
-                c3.fill = ZEBRA_FILL
-
-            if "Tasa de Éxito" in label:
-                if tasa_exito_cost >= 0.8:
-                    c2.fill = SUCCESS_FILL
-                elif tasa_exito_cost < 0.5:
-                    c2.fill = WARNING_FILL
-
-            ws.row_dimensions[r].height = 20
-            r += 1
-
-    # 5. AJUSTE DINÁMICO DE ANCHO DE COLUMNAS (AUTO-FIT PERFECTO)
-    for col in ws.columns:
-        max_len = 0
-        col_letter = get_column_letter(col[0].column)
-        for cell in col:
-            if cell.row == 1:  # Ignorar celda de título unificada
-                continue
-            if cell.value is not None:
-                # Si es un número formateado como moneda o porcentaje, estimar largo visual
-                val_str = str(cell.value)
-                if isinstance(cell.value, float) and "0.0%" in (cell.number_format or ""):
-                    val_str = f"{cell.value * 100:.1f}%"
-                elif isinstance(cell.value, (int, float)) and "$#" in (cell.number_format or ""):
-                    val_str = f"${cell.value:,.0f}"
-                
-                if len(val_str) > max_len:
-                    max_len = len(val_str)
-        ws.column_dimensions[col_letter].width = max(max_len + 6, 16)
-
-    wb.save(output)
-    return output.getvalue()
-
-# 3.4 EDT Excel
 def generar_excel_edt():
-    output = io.BytesIO()
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "EDT WBS"
-    ws.views.sheetView[0].showGridLines = True
-    
-    ws.append(["Proyecto:", st.session_state.nombre_proj])
-    ws.append([])
-    ws.append(["Fase Principal", "Subfase / Grupo", "Paquete de Trabajo", "Horas Estimadas", "Costo Estimado ($)", "Documentos / Referencias"])
-    
-    for item in st.session_state.edt_list:
-        ws.append([
-            item.get("Fase", ""),
-            item.get("Subfase", ""),
-            item.get("Paquete", ""),
-            item.get("Horas", 0),
-            item.get("Costo", 0),
-            item.get("Documentos", "")
-        ])
+    _xl_titulo(ws, f"Estructura de desglose de trabajo · {st.session_state.nombre_proj}", 6)
+    filas = _filas_edt()
+    fin = _xl_tabla(ws, 3, ENC_EDT, filas, formatos={4: "#,##0.0", 5: "$#,##0"})
+    if filas:
+        ws.cell(row=fin, column=3, value="TOTAL").font = Font(bold=True)
+        ws.cell(row=fin, column=4, value=f"=SUM(D4:D{fin - 1})").number_format = "#,##0.0"
+        ws.cell(row=fin, column=5, value=f"=SUM(E4:E{fin - 1})").number_format = "$#,##0"
+        ws.cell(row=fin, column=4).font = ws.cell(row=fin, column=5).font = Font(bold=True)
+    ws.freeze_panes = "A4"
+    _xl_autofit(ws)
+    return _xl_bytes(wb)
 
-    for col in ws.columns:
-        max_len = max(len(str(cell.value or '')) for cell in col)
-        col_letter = get_column_letter(col[0].column)
-        ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
-        
-    wb.save(output)
-    return output.getvalue()
 
-# 3.5 Riesgos Excel
 def generar_excel_riesgos():
-    output = io.BytesIO()
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Matriz de Riesgos"
-    ws.views.sheetView[0].showGridLines = True
-    
-    ws.append(["Proyecto:", st.session_state.nombre_proj])
-    ws.append([])
-    ws.append(["Riesgo", "Probabilidad (1-5)", "Impacto (1-5)", "Severidad (P x I)", "Nivel de Riesgo"])
-    
-    for r_item in st.session_state.riesgos_list:
-        prob_v = r_item.get("Probabilidad", 1)
-        imp_v = r_item.get("Impacto", 1)
-        sev = prob_v * imp_v
-        ws.append([
-            r_item.get("Riesgo", ""),
-            prob_v,
-            imp_v,
-            sev,
-            clasificar_riesgo(sev)
-        ])
+    _xl_titulo(ws, f"Matriz de riesgos · {st.session_state.nombre_proj}", 5)
+    _xl_tabla(ws, 3, ["Riesgo", "Probabilidad (1-5)", "Impacto (1-5)", "Severidad (P×I)", "Nivel"],
+              _filas_riesgos(), resaltar=lambda i, f: f[3] >= 16)
+    ws.freeze_panes = "A4"
+    _xl_autofit(ws)
+    return _xl_bytes(wb)
 
-    for col in ws.columns:
-        max_len = max(len(str(cell.value or '')) for cell in col)
-        col_letter = get_column_letter(col[0].column)
-        ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
-        
-    wb.save(output)
-    return output.getvalue()
 
-# 3.6 Informes Word
-def generar_word_ers():
-    doc = Document()
-    doc.add_heading(f"Especificación de Requisitos: {st.session_state.nombre_proj}", level=1)
-    doc.add_paragraph(f"Objetivo: {st.session_state.objetivo_text}")
-    
-    doc.add_heading("Requisitos Funcionales", level=2)
-    for idx, rf in enumerate(st.session_state.rf_list, 1):
-        if rf.strip():
-            doc.add_paragraph(f"RF-{idx:02d}: {rf.strip()}")
-            
-    doc.add_heading("Requisitos No Funcionales", level=2)
-    for idx, rnf in enumerate(st.session_state.rnf_list, 1):
-        if rnf.strip():
-            doc.add_paragraph(f"RNF-{idx:02d}: {rnf.strip()}")
-            
-    target_stream = io.BytesIO()
-    doc.save(target_stream)
-    return target_stream.getvalue()
+@st.cache_data(show_spinner=False, max_entries=8)
+def generar_excel_montecarlo(dias, costos, cfg):
+    wb = openpyxl.Workbook()
+    met = calcular_metricas(dias, costos, cfg["dias_meta"], cfg["costo_meta"], cfg["perc"])
+    perc = cfg["perc"]
 
-def generar_word_mementomori():
-    doc = Document()
-    
-    # Encabezado principal
-    p_main = doc.add_heading(level=0)
-    r_main = p_main.add_run(f"REPORTE MEMENTO MORI: {st.session_state.nombre_proj.upper()}")
-    r_main.font.bold = True
-    
-    doc.add_paragraph(f"Integrantes / Responsables: {st.session_state.integrantes}")
-    doc.add_paragraph("Análisis Crítico Integral de Requisitos, Arquitectura, Tiempos, EDT y Riesgos del Sistema.")
-    doc.add_paragraph("="*65)
-    
-    # 1. INTRODUCCIÓN Y OBJETIVOS
-    doc.add_heading("1. Introducción y Objetivos del Proyecto", level=1)
-    doc.add_paragraph(f"Objetivo Principal: {st.session_state.objetivo_text}")
-    
-    p1 = doc.add_paragraph()
-    p1.add_run("🔍 Análisis Crítico e Interpretación: ").bold = True
-    p1.add_run(
-        f"El objetivo planteado para el proyecto '{st.session_state.nombre_proj}' aborda la necesidad clave de automatización e integración. "
-        "Sin embargo, el punto crítico principal radica en controlar el alcance funcional inicial. "
-        "Bajo el análisis MementoMori, el principal riesgo de esta fase es la expansión descontrolada del alcance (Scope Creep), "
-        "la cual puede desalinear las expectativas de los interesados antes de consolidar el producto mínimo viable (MVP)."
-    )
+    # --- Hoja 1: Resumen ejecutivo
+    ws = wb.active
+    ws.title = "Resumen"
+    _xl_titulo(ws, f"Simulación Monte Carlo · {cfg['proyecto']}", 3)
+    f = _xl_meta(ws, 3, [
+        ("Proyecto", cfg["proyecto"]),
+        ("Fuente de estimación", cfg["fuente"]),
+        ("Distribución", cfg["dist"]),
+        ("Parámetros", cfg["parametros"]),
+        ("Iteraciones", met["n"]),
+        ("Fecha de inicio", cfg["inicio"]),
+        ("Calendario", "Días hábiles" if cfg["habiles"] else "Días corridos"),
+        ("Plazo meta (días)", cfg["dias_meta"]),
+        ("Presupuesto meta ($)", cfg["costo_meta"]),
+        ("Confianza exigida", f"P{perc}"),
+    ])
+    ws.cell(row=f - 2, column=2).number_format = "#,##0.0"
+    ws.cell(row=f - 1, column=2).number_format = "$#,##0"
+    _, titulo_v = veredicto(met, perc)
+    f += 1
+    ws.cell(row=f, column=1, value="Veredicto").font = Font(bold=True, size=12, color="0F172A")
+    ws.cell(row=f, column=2, value=titulo_v).font = Font(bold=True, size=12, color=XL_NAVY)
+    f += 2
 
-    # 2. REQUISITOS
-    doc.add_heading("2. Especificación de Requisitos (RF y RNF)", level=1)
-    doc.add_heading("Requisitos Funcionales (RF)", level=2)
-    for idx, rf in enumerate(st.session_state.rf_list, 1):
-        if rf.strip():
-            doc.add_paragraph(f"• RF-{idx:02d}: {rf.strip()}")
-            
-    doc.add_heading("Requisitos No Funcionales (RNF)", level=2)
-    for idx, rnf in enumerate(st.session_state.rnf_list, 1):
-        if rnf.strip():
-            doc.add_paragraph(f"• RNF-{idx:02d}: {rnf.strip()}")
-            
-    p2 = doc.add_paragraph()
-    p2.add_run("🔍 Análisis Crítico de Requisitos: ").bold = True
-    p2.add_run(
-        "Al evaluar la matriz de requisitos, los puntos críticos se concentran en los Requisitos No Funcionales (RNF). "
-        "Si bien los requisitos funcionales aseguran la operatividad del software, un fallo en el cumplimiento de los RNF "
-        "(como latencias elevadas o vulnerabilidades de seguridad) generará la falla total de adopción por parte de los usuarios finales, "
-        "imposibilitando la escalabilidad del sistema."
-    )
+    filas_t = [
+        ["Duración mediana (P50)", met["p50"], "días"],
+        [f"Duración comprometida (P{perc})", met["pt"], "días"],
+        ["Duración pesimista (P95)", met["p95"], "días"],
+        ["Duración promedio", met["media"], "días"],
+        ["Desviación estándar", met["desv"], "días"],
+        ["Reserva de contingencia de tiempo", met["reserva_dias"], "días"],
+        ["Probabilidad de cumplir el plazo", met["prob_t"] / 100, "%"],
+        ["Probabilidad de cumplir el presupuesto", met["prob_c"] / 100, "%"],
+        ["Probabilidad de cumplir ambos", met["prob_ambos"] / 100, "%"],
+    ]
+    fmt_t = {}
+    f_ini = f
+    f = _xl_tabla(ws, f, ["Indicador de tiempo y éxito", "Valor", "Unidad"], filas_t,
+                  resaltar=lambda i, r: "comprometida" in r[0] or "ambos" in r[0])
+    for i, r in enumerate(filas_t):
+        ws.cell(row=f_ini + 1 + i, column=2).number_format = "0.0%" if r[2] == "%" else "#,##0.0"
+        if r[2] == "%":
+            v = r[1]
+            ws.cell(row=f_ini + 1 + i, column=2).fill = PatternFill(
+                "solid", start_color=XL_OK if v >= perc / 100 else (XL_BAD if v < 0.5 else XL_HL))
+    f += 1
+    filas_c = [
+        ["Costo mediano (P50)", met["p50c"]],
+        [f"Costo recomendado (P{perc})", met["ptc"]],
+        ["Costo pesimista (P95)", met["p95c"]],
+        ["Reserva de contingencia de costo", met["reserva_costo"]],
+    ]
+    _xl_tabla(ws, f, ["Indicador financiero", "Valor ($)"], filas_c, formatos={2: "$#,##0"},
+              resaltar=lambda i, r: "recomendado" in r[0])
+    _xl_autofit(ws)
+    ws.column_dimensions["A"].width = 42
 
-    # 3. DIAGRAMAS Y ARQUITECTURA
-    doc.add_heading("3. Arquitectura y Diagramas de Flujo / Secuencia", level=1)
-    doc.add_paragraph("Sintaxis del Diagrama de Flujo / Secuencia Activo:")
-    doc.add_paragraph(st.session_state.flujo_codigo)
-    
-    p3 = doc.add_paragraph()
-    p3.add_run("🔍 Interpretación de Arquitectura y Puntos Críticos: ").bold = True
-    p3.add_run(
-        "Con estos diagramas de flujo y secuencia podemos entender la interacción de componentes y el recorrido de la información. "
-        "El punto crítico identificado es el acoplamiento directo entre el controlador y los servicios de base de datos o autenticación. "
-        "Si no se implementan políticas de reintento, caché o manejo de excepciones HTTP (ej. 401 Unauthorized o 500 Server Error), "
-        "cualquier caída puntual de la base de datos provocará un colapso en cadena en los endpoints expuestos al usuario."
-    )
+    # --- Hoja 2: Percentiles
+    ws2 = wb.create_sheet("Percentiles")
+    _xl_titulo(ws2, "Tabla de confianza (percentiles)", 4)
+    tp = tabla_percentiles(dias, costos, pd.Timestamp(cfg["inicio"]), cfg["habiles"], perc)
+    _xl_tabla(ws2, 3, ["Confianza", "Días", "Fecha estimada de término", "Costo ($)"],
+              [[r["Confianza"], r["Días"], r["Fecha"].strftime("%d/%m/%Y"), r["Costo"]] for r in tp],
+              formatos={2: "#,##0.0", 4: "$#,##0"}, resaltar=lambda i, r: r[0] == f"P{perc}")
+    _xl_autofit(ws2)
 
-    # 4. GESTIÓN KANBAN
-    doc.add_heading("4. Estado de Gestión de Tareas (Tablero Kanban)", level=1)
-    if st.session_state.kanban_tasks:
-        tbl_k = doc.add_table(rows=1, cols=2)
-        tbl_k.rows[0].cells[0].text = "Tarea"
-        tbl_k.rows[0].cells[1].text = "Estado"
-        for t in st.session_state.kanban_tasks:
-            row = tbl_k.add_row().cells
-            row[0].text = t["Tarea"]
-            row[1].text = t["Estado"]
-    else:
-        doc.add_paragraph("No existen tareas registradas.")
+    # --- Hoja 3: Histograma con gráfico nativo de Excel
+    ws3 = wb.create_sheet("Histograma")
+    _xl_titulo(ws3, "Distribución de duraciones simuladas", 4)
+    conteos, bordes = np.histogram(dias, bins=30)
+    filas_h = [[f"{bordes[i]:.1f} – {bordes[i + 1]:.1f}", int(conteos[i]), float(conteos[i] / len(dias)),
+                float((dias <= bordes[i + 1]).mean())] for i in range(len(conteos))]
+    _xl_tabla(ws3, 3, ["Rango (días)", "Escenarios", "% del total", "% acumulado"], filas_h,
+              formatos={3: "0.0%", 4: "0.0%"})
+    _xl_autofit(ws3)
+    graf = BarChart()
+    graf.title = "Frecuencia de duraciones"
+    graf.y_axis.title = "Escenarios"
+    graf.x_axis.title = "Días"
+    graf.add_data(Reference(ws3, min_col=2, min_row=3, max_row=3 + len(filas_h)), titles_from_data=True)
+    graf.set_categories(Reference(ws3, min_col=1, min_row=4, max_row=3 + len(filas_h)))
+    graf.gapWidth = 10
+    graf.height, graf.width = 9, 18
+    graf.legend = None
+    ws3.add_chart(graf, "F3")
+    curva = LineChart()
+    curva.title = "Curva S (probabilidad acumulada)"
+    curva.add_data(Reference(ws3, min_col=4, min_row=3, max_row=3 + len(filas_h)), titles_from_data=True)
+    curva.set_categories(Reference(ws3, min_col=1, min_row=4, max_row=3 + len(filas_h)))
+    curva.height, curva.width = 9, 18
+    curva.legend = None
+    ws3.add_chart(curva, "F23")
 
-    p4 = doc.add_paragraph()
-    p4.add_run("🔍 Análisis Crítico del Flujo Kanban: ").bold = True
-    p4.add_run(
-        "El análisis del tablero de tareas revela que la acumulación de ítems en estado 'En Proceso' "
-        "representa la mayor amenaza para el ritmo de entrega (Work In Progress). Se sugiere definir un límite estricto de tareas simultáneas "
-        "para evitar la sobrecarga de trabajo y la sobreestimación del rendimiento del equipo."
-    )
+    # --- Hoja 4: Datos crudos
+    ws4 = wb.create_sheet("Simulaciones")
+    ws4.append(["Iteración", "Duración (días)", "Costo ($)", "Cumple plazo", "Cumple presupuesto"])
+    for c in ws4[1]:
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = PatternFill("solid", start_color=XL_ACC, end_color=XL_ACC)
+    for i, (d, c) in enumerate(zip(dias, costos), 1):
+        ws4.append([i, round(float(d), 2), round(float(c), 0),
+                    "Sí" if d <= cfg["dias_meta"] else "No", "Sí" if c <= cfg["costo_meta"] else "No"])
+    for col, w in zip("ABCDE", [12, 18, 16, 14, 20]):
+        ws4.column_dimensions[col].width = w
+    ws4.freeze_panes = "A2"
+    return _xl_bytes(wb)
 
-    # 5. EDT / WBS
-    doc.add_heading("5. Estructura de Desglose de Trabajo (EDT / WBS)", level=1)
-    if st.session_state.edt_list:
-        tbl_e = doc.add_table(rows=1, cols=5)
-        hdr_e = tbl_e.rows[0].cells
-        hdr_e[0].text = "Fase"
-        hdr_e[1].text = "Paquete de Trabajo"
-        hdr_e[2].text = "Horas"
-        hdr_e[3].text = "Costo ($)"
-        hdr_e[4].text = "Documentos"
-        
-        tot_hrs = 0
-        tot_cost = 0
-        for item in st.session_state.edt_list:
-            r = tbl_e.add_row().cells
-            r[0].text = str(item.get("Fase", ""))
-            r[1].text = str(item.get("Paquete", ""))
-            r[2].text = str(item.get("Horas", 0))
-            r[3].text = f"${item.get('Costo', 0):,.0f}"
-            r[4].text = str(item.get("Documentos", ""))
-            tot_hrs += item.get("Horas", 0)
-            tot_cost += item.get("Costo", 0)
-            
-        doc.add_paragraph(f"Métricas Totales Planificadas: {tot_hrs:.1f} Horas Totales | Presupuesto Total: ${tot_cost:,.0f}")
-    else:
-        doc.add_paragraph("No hay paquetes de EDT registrados.")
-
-    p5 = doc.add_paragraph()
-    p5.add_run("🔍 Puntos Críticos Presupuestarios y de Carga Horaria: ").bold = True
-    p5.add_run(
-        "Al examinar la EDT, se observa que las actividades con mayor asignación de costo y horas conforman la ruta crítica del proyecto. "
-        "Cualquier imprevisto de estimación en estas fases clave provocará desviaciones acumulativas, "
-        "agotando la reserva de contingencia financiera y extendiendo la fecha límite original."
-    )
-
-    # 6. MONTE CARLO
-    doc.add_heading("6. Análisis y Simulación Monte Carlo", level=1)
-    opt = st.session_state.get("mc_opt", 10)
-    prob = st.session_state.get("mc_prob", 20)
-    pes = st.session_state.get("mc_pes", 45)
-    sims = st.session_state.get("mc_sims", 2000)
-
-    if opt <= prob <= pes:
-        np.random.seed(42)
-        sim_data = np.random.triangular(left=opt, mode=prob, right=pes, size=sims)
-        p50 = np.percentile(sim_data, 50)
-        p85 = np.percentile(sim_data, 85)
-        p95 = np.percentile(sim_data, 95)
-
-        doc.add_paragraph(f"Parámetros Configurados: Optimista={opt} días | Más Probable={prob} días | Pesimista={pes} días (Muestras: {sims})")
-        doc.add_paragraph(f"• Percentil 50 (Mediana Esperada): {p50:.1f} Días")
-        doc.add_paragraph(f"• Percentil 85 (Recomendación de Compromiso): {p85:.1f} Días")
-        doc.add_paragraph(f"• Percentil 95 (Escenario de Alta Incertidumbre): {p95:.1f} Días")
-
-        p6 = doc.add_paragraph()
-        p6.add_run("🔍 Veredicto y Puntos Críticos de Monte Carlo: ").bold = True
-        p6.add_run(
-            f"Con esta simulación Monte Carlo podemos concluir que la entrega es factible a los {p85:.1f} días con un 85% de nivel de confianza. "
-            f"Sin embargo, existe un margen de incertidumbre del 15% asociado a la cola pesimista ({pes} días). "
-            f"Si se materializan complicaciones técnicas de manera simultánea, la probabilidad de sobrepasar la estimación central es considerable, "
-            "lo que generará retrasos en la entrega final salvo que se mantengan controles semanales de seguimiento."
-        )
-    else:
-        doc.add_paragraph("Los parámetros introducidos para la simulación Monte Carlo no son válidos.")
-
-    # 7. MATRIZ DE RIESGOS
-    doc.add_heading("7. Evaluación y Filosofía de Riesgos (MementoMori)", level=1)
-    if st.session_state.riesgos_list:
-        tbl_r = doc.add_table(rows=1, cols=5)
-        hdr_r = tbl_r.rows[0].cells
-        hdr_r[0].text = "Riesgo"
-        hdr_r[1].text = "Probabilidad"
-        hdr_r[2].text = "Impacto"
-        hdr_r[3].text = "Severidad"
-        hdr_r[4].text = "Nivel"
-
-        for r_item in st.session_state.riesgos_list:
-            r_row = tbl_r.add_row().cells
-            prob_v = r_item.get("Probabilidad", 1)
-            imp_v = r_item.get("Impacto", 1)
-            sev = prob_v * imp_v
-            r_row[0].text = str(r_item.get("Riesgo", ""))
-            r_row[1].text = str(prob_v)
-            r_row[2].text = str(imp_v)
-            r_row[3].text = str(sev)
-            r_row[4].text = clasificar_riesgo(sev)
-    else:
-        doc.add_paragraph("No hay riesgos registrados en la matriz.")
-
-    p7 = doc.add_paragraph()
-    p7.add_run("🔍 Estrategia de Mitigación MementoMori: ").bold = True
-    p7.add_run(
-        "Bajo el principio 'Memento Mori' (recordar la vulnerabilidad y planificar anticipadamente los fallos), "
-        "los riesgos con severidad alta y crítica deben contar con planes de contingencia documentados antes de iniciar el desarrollo. "
-        "Ignorar las señales de alerta tempranas en los componentes críticos provocará que problemas menores escalen a fallos sistémicos indeseados."
-    )
-
-    # 8. CONCLUSIONES
-    doc.add_heading("8. Conclusiones y Recomendaciones Finales", level=1)
-    doc.add_paragraph(
-        f"El proyecto '{st.session_state.nombre_proj}' cuenta con una base metodológica y técnica sólida. "
-        f"Se recomienda formalizar el compromiso de entrega considerando la simulación de Monte Carlo "
-        "y monitorear de forma continua los requisitos no funcionales y la matriz de riesgos para asegurar el éxito del proyecto."
-    )
-
-    target_stream = io.BytesIO()
-    doc.save(target_stream)
-    return target_stream.getvalue()
 
 def generar_excel_estilizado():
-    output = io.BytesIO()
     wb = openpyxl.Workbook()
-    
-    # Hoja 1: Requisitos
     ws1 = wb.active
     ws1.title = "Requisitos"
-    ws1.views.sheetView[0].showGridLines = True
-    ws1.append(["Código", "Tipo", "Descripción"])
-    for idx, rf in enumerate(st.session_state.rf_list, 1):
-        if rf.strip():
-            ws1.append([f"RF-{idx:02d}", "Funcional", rf.strip()])
-    for idx, rnf in enumerate(st.session_state.rnf_list, 1):
-        if rnf.strip():
-            ws1.append([f"RNF-{idx:02d}", "No Funcional", rnf.strip()])
+    _xl_titulo(ws1, f"Requisitos · {st.session_state.nombre_proj}", 3)
+    _xl_tabla(ws1, 3, ["Código", "Tipo", "Descripción"], _filas_requisitos())
+    _xl_autofit(ws1)
 
-    # Hoja 2: Kanban
-    ws2 = wb.create_sheet(title="Kanban")
-    ws2.views.sheetView[0].showGridLines = True
-    ws2.append(["Tarea", "Estado"])
-    for k in st.session_state.kanban_tasks:
-        ws2.append([k["Tarea"], k["Estado"]])
+    ws2 = wb.create_sheet("Kanban")
+    _xl_titulo(ws2, "Tablero Kanban", 2)
+    _xl_tabla(ws2, 3, ["Tarea", "Estado"], [[t["Tarea"], t["Estado"]] for t in st.session_state.kanban_tasks])
+    _xl_autofit(ws2)
 
-    # Hoja 3: EDT (WBS Ampliada)
-    ws3 = wb.create_sheet(title="EDT (WBS)")
-    ws3.views.sheetView[0].showGridLines = True
-    ws3.append(["Fase Principal", "Subfase / Grupo", "Paquete de Trabajo", "Horas Estimadas", "Costo Estimado", "Documentos / Adjuntos"])
-    for e in st.session_state.edt_list:
-        ws3.append([
-            e.get("Fase", ""),
-            e.get("Subfase", ""),
-            e.get("Paquete", ""),
-            e.get("Horas", 0),
-            e.get("Costo", 0),
-            e.get("Documentos", "")
+    ws3 = wb.create_sheet("EDT (WBS)")
+    _xl_titulo(ws3, "Estructura de desglose de trabajo", 6)
+    _xl_tabla(ws3, 3, ENC_EDT, _filas_edt(), formatos={4: "#,##0.0", 5: "$#,##0"})
+    _xl_autofit(ws3)
+
+    ws4 = wb.create_sheet("Riesgos")
+    _xl_titulo(ws4, "Matriz de riesgos", 5)
+    _xl_tabla(ws4, 3, ["Riesgo", "Probabilidad", "Impacto", "Severidad", "Nivel"], _filas_riesgos(),
+              resaltar=lambda i, f: f[3] >= 16)
+    _xl_autofit(ws4)
+
+    if MC_ACTUAL:
+        met, cfg = MC_ACTUAL["met"], MC_ACTUAL["cfg"]
+        ws5 = wb.create_sheet("Monte Carlo")
+        _xl_titulo(ws5, "Resumen Monte Carlo", 2)
+        _xl_tabla(ws5, 3, ["Indicador", "Valor"], [
+            ["Distribución", cfg["dist"]], ["Fuente", cfg["fuente"]], ["Iteraciones", met["n"]],
+            ["P50 (días)", round(met["p50"], 1)], [f"P{cfg['perc']} (días)", round(met["pt"], 1)],
+            ["P95 (días)", round(met["p95"], 1)], [f"Costo P{cfg['perc']} ($)", round(met["ptc"])],
+            ["Prob. cumplir plazo", f"{met['prob_t']:.1f}%"], ["Prob. cumplir presupuesto", f"{met['prob_c']:.1f}%"],
+            ["Prob. cumplir ambos", f"{met['prob_ambos']:.1f}%"],
         ])
+        _xl_autofit(ws5)
+    return _xl_bytes(wb)
 
-    for sheet in wb.worksheets:
-        for col in sheet.columns:
-            max_len = max(len(str(cell.value or '')) for cell in col)
-            col_letter = get_column_letter(col[0].column)
-            sheet.column_dimensions[col_letter].width = max(max_len + 4, 12)
 
-    wb.save(output)
-    return output.getvalue()
+def tabla_word(doc, encabezados, filas):
+    t = doc.add_table(rows=1, cols=len(encabezados))
+    try:
+        t.style = "Light Grid Accent 1"
+    except Exception:
+        t.style = "Table Grid"
+    for i, h in enumerate(encabezados):
+        celda = t.rows[0].cells[i]
+        celda.text = ""
+        celda.paragraphs[0].add_run(str(h)).bold = True
+    for f in filas:
+        cells = t.add_row().cells
+        for i, v in enumerate(f):
+            cells[i].text = str(v)
+    doc.add_paragraph()
+    return t
 
-# ==========================================
-# 4. INTERFAZ PRINCIPAL Y CONMUTADOR DE TEMA
-# ==========================================
-st.title("✦ MatrixDev ✦")
-st.markdown(f"<p style='text-align: center; color: {sub_color};'>Gestión y Arquitectura de Proyectos</p>", unsafe_allow_html=True)
 
-# BOTONES DE CAMBIO DE TEMA VISUAL CENTRADOS
-col_sp1, col_btn1, col_btn2, col_btn3, col_sp2 = st.columns([1.5, 1, 1, 1, 1.5])
+def parrafo_analisis(doc, titulo, texto):
+    p = doc.add_paragraph()
+    r = p.add_run(titulo + " ")
+    r.bold = True
+    r.font.color.rgb = RGBColor(0x1E, 0x3A, 0x8A)
+    p.add_run(texto)
 
-with col_btn1:
-    if st.button("Vino Tinto", use_container_width=True):
-        st.session_state.tema = "vino"
-        st.rerun()
 
-with col_btn2:
-    if st.button("Gris Oscuro", use_container_width=True):
-        st.session_state.tema = "oscuro"
-        st.rerun()
+def _doc_base():
+    doc = Document()
+    estilo = doc.styles["Normal"]
+    estilo.font.name = "Calibri"
+    estilo.font.size = Pt(11)
+    return doc
 
-with col_btn3:
-    if st.button("Claro", use_container_width=True):
-        st.session_state.tema = "claro"
-        st.rerun()
 
-st.write("---")
+def generar_word_ers():
+    doc = _doc_base()
+    doc.add_heading(f"Especificación de requisitos: {st.session_state.nombre_proj}", level=0)
+    doc.add_paragraph(f"Equipo: {st.session_state.integrantes}")
+    doc.add_paragraph(f"Objetivo: {st.session_state.objetivo_text}")
+    doc.add_heading("Matriz de requisitos", level=1)
+    filas = _filas_requisitos()
+    if filas:
+        tabla_word(doc, ["Código", "Tipo", "Descripción"], filas)
+    else:
+        doc.add_paragraph("No hay requisitos registrados.")
+    out = io.BytesIO()
+    doc.save(out)
+    return out.getvalue()
+
+
+def generar_word_mementomori():
+    doc = _doc_base()
+    nombre = st.session_state.nombre_proj
+
+    doc.add_heading(f"Reporte Memento Mori: {nombre}", level=0)
+    doc.add_paragraph(f"Integrantes / responsables: {st.session_state.integrantes}")
+    doc.add_paragraph("Análisis crítico integral de requisitos, arquitectura, tiempos, EDT y riesgos del sistema.")
+
+    # 1. Introducción
+    doc.add_heading("1. Introducción y objetivos del proyecto", level=1)
+    doc.add_paragraph(f"Objetivo principal: {st.session_state.objetivo_text}")
+    parrafo_analisis(doc, "Análisis crítico e interpretación:",
+        f"El objetivo planteado para el proyecto '{nombre}' aborda la necesidad clave de automatización e integración. "
+        "Sin embargo, el punto crítico principal radica en controlar el alcance funcional inicial. "
+        "Bajo el análisis Memento Mori, el principal riesgo de esta fase es la expansión descontrolada del alcance (scope creep), "
+        "la cual puede desalinear las expectativas de los interesados antes de consolidar el producto mínimo viable (MVP).")
+
+    # 2. Requisitos
+    doc.add_heading("2. Especificación de requisitos (RF y RNF)", level=1)
+    filas = _filas_requisitos()
+    if filas:
+        tabla_word(doc, ["Código", "Tipo", "Descripción"], filas)
+    parrafo_analisis(doc, "Análisis crítico de requisitos:",
+        "Los puntos críticos se concentran en los requisitos no funcionales (RNF). "
+        "Si bien los requisitos funcionales aseguran la operatividad del software, un fallo en el cumplimiento de los RNF "
+        "(latencias elevadas o vulnerabilidades de seguridad) puede provocar el rechazo de los usuarios finales "
+        "e impedir la escalabilidad del sistema.")
+
+    # 3. Arquitectura
+    doc.add_heading("3. Arquitectura y diagramas de flujo / secuencia", level=1)
+    doc.add_paragraph("Sintaxis del diagrama activo:")
+    p_code = doc.add_paragraph()
+    r_code = p_code.add_run(st.session_state.flujo_codigo)
+    r_code.font.name = "Consolas"
+    r_code.font.size = Pt(9)
+    parrafo_analisis(doc, "Interpretación de arquitectura y puntos críticos:",
+        "Los diagramas permiten entender la interacción de componentes y el recorrido de la información. "
+        "El punto crítico es el acoplamiento directo entre el controlador y los servicios de base de datos o autenticación. "
+        "Sin políticas de reintento, caché o manejo de excepciones HTTP (401, 500), una caída puntual de la base de datos "
+        "provocará un colapso en cadena en los endpoints expuestos al usuario.")
+
+    # 4. Kanban
+    doc.add_heading("4. Estado de gestión de tareas (tablero Kanban)", level=1)
+    tareas = st.session_state.kanban_tasks
+    if tareas:
+        tabla_word(doc, ["Tarea", "Estado"], [[t["Tarea"], t["Estado"]] for t in tareas])
+        n_proc = sum(1 for t in tareas if t["Estado"] == "En Proceso")
+        n_ok = sum(1 for t in tareas if t["Estado"] == "Completado")
+        doc.add_paragraph(f"Avance: {n_ok} de {len(tareas)} tareas completadas ({n_ok / len(tareas) * 100:.0f}%). "
+                          f"Trabajo en proceso (WIP): {n_proc} tareas.")
+    else:
+        doc.add_paragraph("No existen tareas registradas.")
+    parrafo_analisis(doc, "Análisis crítico del flujo Kanban:",
+        "La acumulación de ítems 'En Proceso' es la mayor amenaza para el ritmo de entrega (WIP). "
+        "Se sugiere definir un límite estricto de tareas simultáneas para evitar sobrecarga y sobreestimación del rendimiento.")
+
+    # 5. EDT
+    doc.add_heading("5. Estructura de desglose de trabajo (EDT / WBS)", level=1)
+    edt = st.session_state.edt_list
+    if edt:
+        tabla_word(doc, ["Fase", "Paquete de trabajo", "Horas", "Costo ($)", "Documentos"],
+                   [[e.get("Fase", ""), e.get("Paquete", ""), fmt_num(e.get("Horas", 0), 1),
+                     fmt_money(e.get("Costo", 0)), e.get("Documentos", "")] for e in edt])
+        tot_h = sum(float(e.get("Horas", 0) or 0) for e in edt)
+        tot_c = sum(float(e.get("Costo", 0) or 0) for e in edt)
+        doc.add_paragraph(f"Totales planificados: {fmt_num(tot_h, 1)} horas | Presupuesto: {fmt_money(tot_c)}")
+    else:
+        doc.add_paragraph("No hay paquetes de EDT registrados.")
+    parrafo_analisis(doc, "Puntos críticos presupuestarios y de carga horaria:",
+        "Las actividades con mayor asignación de costo y horas conforman la ruta crítica. Cualquier imprevisto de estimación "
+        "en ellas provoca desviaciones acumulativas que agotan la reserva de contingencia y extienden la fecha límite.")
+
+    # 6. Monte Carlo
+    doc.add_heading("6. Análisis y simulación Monte Carlo", level=1)
+    if MC_ACTUAL:
+        met, cfg = MC_ACTUAL["met"], MC_ACTUAL["cfg"]
+        perc = cfg["perc"]
+        doc.add_paragraph(f"Fuente de estimación: {cfg['fuente']} | Distribución: {cfg['dist']} | "
+                          f"Iteraciones: {fmt_num(met['n'])} | Parámetros: {cfg['parametros']}")
+        doc.add_paragraph(f"Metas evaluadas: plazo de {fmt_num(cfg['dias_meta'], 1)} días y presupuesto de "
+                          f"{fmt_money(cfg['costo_meta'])}, con confianza exigida P{perc}.")
+        tabla_word(doc, ["Indicador", "Valor"], [
+            ["Duración mediana (P50)", f"{fmt_num(met['p50'], 1)} días"],
+            [f"Duración comprometida (P{perc})", f"{fmt_num(met['pt'], 1)} días"],
+            ["Duración pesimista (P95)", f"{fmt_num(met['p95'], 1)} días"],
+            ["Reserva de contingencia (tiempo)", f"{fmt_num(met['reserva_dias'], 1)} días"],
+            [f"Costo recomendado (P{perc})", fmt_money(met["ptc"])],
+            ["Reserva de contingencia (costo)", fmt_money(met["reserva_costo"])],
+            ["Probabilidad de cumplir el plazo", f"{fmt_num(met['prob_t'], 1)}%"],
+            ["Probabilidad de cumplir el presupuesto", f"{fmt_num(met['prob_c'], 1)}%"],
+            ["Probabilidad de cumplir ambos", f"{fmt_num(met['prob_ambos'], 1)}%"],
+        ])
+        _, titulo_v = veredicto(met, perc)
+        parrafo_analisis(doc, f"Veredicto: {titulo_v}.",
+            f"De cada 100 escenarios simulados, {round(met['prob_ambos'])} terminan dentro de plazo y presupuesto. "
+            f"Para comprometer la entrega con un {perc}% de confianza se requieren {fmt_num(met['pt'], 1)} días "
+            f"(fecha estimada {MC_ACTUAL['fecha_pt'].strftime('%d/%m/%Y')}) y un presupuesto de {fmt_money(met['ptc'])}. "
+            f"La diferencia frente a la mediana ({fmt_num(met['reserva_dias'], 1)} días y {fmt_money(met['reserva_costo'])}) "
+            "corresponde a la reserva de contingencia recomendada. El escenario pesimista (P95) "
+            f"alcanza {fmt_num(met['p95'], 1)} días, por lo que se aconsejan controles semanales de seguimiento.")
+    else:
+        doc.add_paragraph("Los parámetros configurados para la simulación Monte Carlo no son válidos.")
+
+    # 7. Riesgos
+    doc.add_heading("7. Evaluación y filosofía de riesgos (Memento Mori)", level=1)
+    filas_r = _filas_riesgos()
+    if filas_r:
+        tabla_word(doc, ["Riesgo", "Probabilidad", "Impacto", "Severidad", "Nivel"], filas_r)
+    else:
+        doc.add_paragraph("No hay riesgos registrados en la matriz.")
+    parrafo_analisis(doc, "Estrategia de mitigación Memento Mori:",
+        "Bajo el principio 'Memento Mori' (recordar la vulnerabilidad y planificar anticipadamente los fallos), "
+        "los riesgos de severidad alta y crítica deben contar con planes de contingencia documentados antes de iniciar el desarrollo.")
+
+    # 8. Conclusiones
+    doc.add_heading("8. Conclusiones y recomendaciones finales", level=1)
+    doc.add_paragraph(
+        f"El proyecto '{nombre}' cuenta con una base metodológica y técnica sólida. Se recomienda formalizar el compromiso "
+        "de entrega según la simulación Monte Carlo y monitorear de forma continua los requisitos no funcionales y la matriz "
+        "de riesgos para asegurar el éxito del proyecto.")
+
+    out = io.BytesIO()
+    doc.save(out)
+    return out.getvalue()
+
+
+# =====================================================================
+# 6. ENCABEZADO
+# =====================================================================
+st.markdown(
+    f'<div class="md-hero"><div><h1>MatrixDev</h1>'
+    f'<div class="md-hero-sub">Gestión y arquitectura de proyectos de software</div></div>'
+    f'<div class="md-chip">Proyecto <b>{st.session_state.nombre_proj}</b></div></div>',
+    unsafe_allow_html=True,
+)
 
 tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab_full = st.tabs([
-    "1. Requisitos", 
-    "2. Modelado", 
-    "3. Gestión", 
-    "4. Monte Carlo", 
-    "5. Flujos", 
-    "6. EDT (WBS)", 
-    "7. Riesgos", 
-    "8. Reporte MementoMori",
-    "📦 Descarga Full"
+    "Requisitos", "Modelado", "Gestión", "🎲 Monte Carlo", "Flujos", "EDT (WBS)", "Riesgos",
+    "Reporte Memento Mori", "📦 Descarga completa",
 ])
 
-# ------------------------------------------
+XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+# ---------------------------------------------------------------------
 # TAB 1: REQUISITOS
-# ------------------------------------------
+# ---------------------------------------------------------------------
 with tab1:
-    st.markdown("### Definición del Sistema")
+    seccion("Definición del sistema", "Datos generales del proyecto. Se usan en todos los reportes exportados.")
     c_p1, c_p2 = st.columns(2)
-    st.session_state.nombre_proj = c_p1.text_input("Nombre del Proyecto", st.session_state.nombre_proj)
-    st.session_state.integrantes = c_p2.text_input("Integrantes / Equipo", st.session_state.integrantes)
-    st.session_state.objetivo_text = st.text_area("Objetivo Principal", st.session_state.objetivo_text, height=80)
-    
-    st.write("---")
-    st.markdown("### Requisitos Funcionales (RF)")
-    
-    with st.form("form_add_rf", clear_on_submit=True):
-        col_in, col_btn = st.columns([4, 1])
-        with col_in:
-            nuevo_rf_val = st.text_input("Nuevo RF", placeholder="Escribe un requisito...", label_visibility="collapsed")
-        with col_btn:
-            btn_add_rf = st.form_submit_button("Añadir", use_container_width=True)
-            
-        if btn_add_rf and nuevo_rf_val.strip():
-            st.session_state.rf_list.append(nuevo_rf_val.strip())
+    st.session_state.nombre_proj = c_p1.text_input("Nombre del proyecto", st.session_state.nombre_proj)
+    st.session_state.integrantes = c_p2.text_input("Integrantes / equipo", st.session_state.integrantes)
+    st.session_state.objetivo_text = st.text_area("Objetivo principal", st.session_state.objetivo_text, height=80)
+
+    def bloque_requisitos(titulo, lista_key, prefijo, form_key, placeholder):
+        st.write("")
+        seccion(titulo)
+        with st.form(form_key, clear_on_submit=True):
+            c_in, c_b = st.columns([4, 1])
+            nuevo = c_in.text_input("Nuevo", placeholder=placeholder, label_visibility="collapsed")
+            if c_b.form_submit_button("Añadir", **ANCHO) and nuevo.strip():
+                st.session_state[lista_key].append(nuevo.strip())
+                st.rerun()
+        lista = st.session_state[lista_key]
+        if not lista:
+            st.info("Aún no hay requisitos. Escribe uno arriba y pulsa Añadir.")
+            return
+        borrar = None
+        for i, item in enumerate(lista):
+            c_tag, c_input, c_del = st.columns([0.8, 5, 0.6])
+            c_tag.markdown(f"**{prefijo}-{i + 1:02d}**")
+            lista[i] = c_input.text_input(f"{prefijo}_{i}", value=item, label_visibility="collapsed",
+                                          key=f"{prefijo.lower()}_field_{i}")
+            if c_del.button("🗑️", key=f"del_{prefijo.lower()}_{i}", help="Eliminar requisito"):
+                borrar = i
+        if borrar is not None:
+            lista.pop(borrar)
+            limpiar_widgets(f"{prefijo.lower()}_field_")
             st.rerun()
 
-    if not st.session_state.rf_list:
-        st.info("No hay requisitos funcionales registrados.")
-    else:
-        rf_to_delete = None
-        for i, item in enumerate(st.session_state.rf_list):
-            c_tag, c_input, c_del = st.columns([0.8, 5, 0.8])
-            c_tag.markdown(f"**RF-{i+1:02d}**")
-            new_val = c_input.text_input(f"rf_in_{i}", value=item, label_visibility="collapsed", key=f"rf_field_{i}")
-            st.session_state.rf_list[i] = new_val
-            
-            if c_del.button("🗑️", key=f"del_rf_{i}"):
-                rf_to_delete = i
+    bloque_requisitos("Requisitos funcionales (RF)", "rf_list", "RF", "form_add_rf", "Escribe un requisito funcional…")
+    bloque_requisitos("Requisitos no funcionales (RNF)", "rnf_list", "RNF", "form_add_rnf",
+                      "Escribe un requisito no funcional…")
 
-        if rf_to_delete is not None:
-            st.session_state.rf_list.pop(rf_to_delete)
-            st.rerun()
-
-    st.write("---")
-    st.markdown("### Requisitos No Funcionales (RNF)")
-    
-    with st.form("form_add_rnf", clear_on_submit=True):
-        col_in_rnf, col_btn_rnf = st.columns([4, 1])
-        with col_in_rnf:
-            nuevo_rnf_val = st.text_input("Nuevo RNF", placeholder="Escribe un requisito no funcional...", label_visibility="collapsed")
-        with col_btn_rnf:
-            btn_add_rnf = st.form_submit_button("Añadir", use_container_width=True)
-            
-        if btn_add_rnf and nuevo_rnf_val.strip():
-            st.session_state.rnf_list.append(nuevo_rnf_val.strip())
-            st.rerun()
-
-    if not st.session_state.rnf_list:
-        st.info("No hay requisitos no funcionales registrados.")
-    else:
-        rnf_to_delete = None
-        for i, item in enumerate(st.session_state.rnf_list):
-            c_tag, c_input, c_del = st.columns([0.8, 5, 0.8])
-            c_tag.markdown(f"**RNF-{i+1:02d}**")
-            new_val = c_input.text_input(f"rnf_in_{i}", value=item, label_visibility="collapsed", key=f"rnf_field_{i}")
-            st.session_state.rnf_list[i] = new_val
-            
-            if c_del.button("🗑️", key=f"del_rnf_{i}"):
-                rnf_to_delete = i
-
-        if rnf_to_delete is not None:
-            st.session_state.rnf_list.pop(rnf_to_delete)
-            st.rerun()
-
-    # DESCARGA INDIVIDUAL - TAB 1
-    st.write("---")
-    st.markdown("#### 📥 Exportar Punto 1: Requisitos")
+    st.divider()
+    seccion("Exportar requisitos")
     c_dl1, c_dl2 = st.columns(2)
-    with c_dl1:
-        st.download_button(
-            label="📊 Descargar Requisitos en Excel (.xlsx)",
-            data=generar_excel_requisitos(),
-            file_name=f"Requisitos_{st.session_state.nombre_proj.replace(' ', '_')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
-        )
-    with c_dl2:
-        st.download_button(
-            label="📄 Descargar Documento ERS en Word (.docx)",
-            data=generar_word_ers(),
-            file_name=f"ERS_Requisitos_{st.session_state.nombre_proj.replace(' ', '_')}.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            use_container_width=True
-        )
+    c_dl1.download_button("📊 Requisitos en Excel (.xlsx)", generar_excel_requisitos(),
+                          f"Requisitos_{slug(st.session_state.nombre_proj)}.xlsx", XLSX, **ANCHO)
+    c_dl2.download_button("📄 Documento ERS en Word (.docx)", generar_word_ers(),
+                          f"ERS_Requisitos_{slug(st.session_state.nombre_proj)}.docx", DOCX, **ANCHO)
 
-# ------------------------------------------
+# ---------------------------------------------------------------------
 # TAB 2: MODELADO
-# ------------------------------------------
+# ---------------------------------------------------------------------
 with tab2:
-    st.markdown("### Arquitectura Visual")
-    default_mermaid = """graph TD
-    A[Inicio] --> B{Validar}
-    B -->|Sí| C[Éxito]
-    B -->|No| D[Error]"""
-    
-    codigo_mermaid = st.text_area("Sintaxis Mermaid", value=default_mermaid, height=120)
-    st_mermaid(codigo_mermaid)
+    seccion("Arquitectura visual", "Escribe sintaxis Mermaid a la izquierda y revisa el diagrama a la derecha.")
+    c_code, c_prev = st.columns([1, 1.3])
+    with c_code:
+        st.text_area("Sintaxis Mermaid", key="modelo_mermaid", height=260)
+        st.download_button("📌 Descargar diagrama (.mmd)", st.session_state.modelo_mermaid.encode("utf-8"),
+                           f"Diagrama_Modelado_{slug(st.session_state.nombre_proj)}.mmd", "text/plain", **ANCHO)
+    with c_prev:
+        st_mermaid(st.session_state.modelo_mermaid)
 
-    # DESCARGA INDIVIDUAL - TAB 2
-    st.write("---")
-    st.markdown("#### 📥 Exportar Punto 2: Diagrama de Modelado")
-    col_d2_1, col_d2_2 = st.columns([1, 1])
-    with col_d2_1:
-        st.download_button(
-            label="📌 Descargar Código Diagrama Mermaid (.mmd)",
-            data=codigo_mermaid.encode('utf-8'),
-            file_name=f"Diagrama_Modelado_{st.session_state.nombre_proj.replace(' ', '_')}.mmd",
-            mime="text/plain",
-            use_container_width=True
-        )
-
-# ------------------------------------------
-# TAB 3: GESTIÓN
-# ------------------------------------------
+# ---------------------------------------------------------------------
+# TAB 3: GESTIÓN (KANBAN)
+# ---------------------------------------------------------------------
 with tab3:
-    st.markdown("### Tablero Kanban")
-    
+    seccion("Tablero Kanban", "Agrega tareas y muévelas cambiando su estado.")
+    tareas = st.session_state.kanban_tasks
+
     with st.form("form_kanban", clear_on_submit=True):
         col_t, col_s, col_b = st.columns([3, 2, 1])
-        with col_t:
-            nueva_t = st.text_input("Tarea", placeholder="Nueva tarea...", label_visibility="collapsed")
-        with col_s:
-            estado_t = st.selectbox("Estado", ["Pendiente", "En Proceso", "Completado"], label_visibility="collapsed")
-        with col_b:
-            btn_add_k = st.form_submit_button("Añadir", use_container_width=True)
-            
-        if btn_add_k and nueva_t.strip():
-            st.session_state.kanban_tasks.append({"Tarea": nueva_t.strip(), "Estado": estado_t})
+        nueva_t = col_t.text_input("Tarea", placeholder="Nueva tarea…", label_visibility="collapsed")
+        estado_t = col_s.selectbox("Estado", ESTADOS_KANBAN, label_visibility="collapsed")
+        if col_b.form_submit_button("Añadir", **ANCHO) and nueva_t.strip():
+            tareas.append({"Tarea": nueva_t.strip(), "Estado": estado_t})
             st.rerun()
 
-    if not st.session_state.kanban_tasks:
-        st.info("No hay tareas registradas.")
+    if tareas:
+        n_ok = sum(t["Estado"] == "Completado" for t in tareas)
+        n_proc = sum(t["Estado"] == "En Proceso" for t in tareas)
+        st.progress(n_ok / len(tareas), text=f"Avance: {n_ok} de {len(tareas)} tareas completadas ({n_ok / len(tareas) * 100:.0f}%)")
+        if n_proc > 3:
+            st.warning(f"Hay {n_proc} tareas en proceso a la vez. Limitar el WIP a 3 ayuda a terminar antes.")
+
+        colores_estado = {"Pendiente": T["sub"], "En Proceso": T["warn"], "Completado": T["ok"]}
+        cols_kb = st.columns(3)
+        for col, estado in zip(cols_kb, ESTADOS_KANBAN):
+            items = [t for t in tareas if t["Estado"] == estado]
+            cards = "".join(f'<div class="kb-card" style="--c:{colores_estado[estado]}">{t["Tarea"]}</div>' for t in items)
+            if not items:
+                cards = f'<div style="color:{T["sub"]};font-size:.88rem">Sin tareas</div>'
+            col.markdown(f'<div class="kb-col"><div class="kb-h"><span>{estado}</span><span class="n">{len(items)}</span></div>'
+                         f'{cards}</div>', unsafe_allow_html=True)
+
+        st.write("")
+        with st.expander("Editar o eliminar tareas", expanded=False):
+            borrar = None
+            for i, t in enumerate(tareas):
+                c_txt, c_sel, c_d = st.columns([3, 2, 0.6])
+                t["Tarea"] = c_txt.text_input(f"kt_{i}", value=t["Tarea"], label_visibility="collapsed", key=f"kt_in_{i}")
+                t["Estado"] = c_sel.selectbox(f"ks_{i}", ESTADOS_KANBAN, index=ESTADOS_KANBAN.index(t["Estado"]),
+                                              label_visibility="collapsed", key=f"ks_in_{i}")
+                if c_d.button("🗑️", key=f"del_k_{i}", help="Eliminar tarea"):
+                    borrar = i
+            if borrar is not None:
+                tareas.pop(borrar)
+                limpiar_widgets("kt_in_", "ks_in_")
+                st.rerun()
     else:
-        task_to_delete = None
-        for i, t in enumerate(st.session_state.kanban_tasks):
-            col_txt, col_sel, col_d = st.columns([3, 2, 0.8])
-            updated_text = col_txt.text_input(f"kt_{i}", value=t["Tarea"], label_visibility="collapsed", key=f"kt_in_{i}")
-            updated_status = col_sel.selectbox(
-                f"ks_{i}", 
-                ["Pendiente", "En Proceso", "Completado"], 
-                index=["Pendiente", "En Proceso", "Completado"].index(t["Estado"]), 
-                label_visibility="collapsed", 
-                key=f"ks_in_{i}"
-            )
-            
-            st.session_state.kanban_tasks[i]["Tarea"] = updated_text
-            st.session_state.kanban_tasks[i]["Estado"] = updated_status
-            
-            if col_d.button("🗑️", key=f"del_k_{i}"):
-                task_to_delete = i
-                
-        if task_to_delete is not None:
-            st.session_state.kanban_tasks.pop(task_to_delete)
-            st.rerun()
+        st.info("No hay tareas. Escribe la primera arriba para empezar el tablero.")
 
-    # DESCARGA INDIVIDUAL - TAB 3
-    st.write("---")
-    st.markdown("#### 📥 Exportar Punto 3: Tablero Kanban")
+    st.divider()
+    seccion("Exportar tablero")
     c_dk1, c_dk2 = st.columns(2)
-    with c_dk1:
-        st.download_button(
-            label="📊 Descargar Tablero Kanban en Excel (.xlsx)",
-            data=generar_excel_kanban(),
-            file_name=f"Kanban_{st.session_state.nombre_proj.replace(' ', '_')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
-        )
-    with c_dk2:
-        df_k_exp = pd.DataFrame(st.session_state.kanban_tasks)
-        st.download_button(
-            label="📄 Descargar Tareas en CSV (.csv)",
-            data=df_k_exp.to_csv(index=False).encode('utf-8'),
-            file_name=f"Kanban_{st.session_state.nombre_proj.replace(' ', '_')}.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
+    c_dk1.download_button("📊 Kanban en Excel (.xlsx)", generar_excel_kanban(),
+                          f"Kanban_{slug(st.session_state.nombre_proj)}.xlsx", XLSX, **ANCHO)
+    c_dk2.download_button("📄 Tareas en CSV (.csv)", pd.DataFrame(tareas).to_csv(index=False).encode("utf-8"),
+                          f"Kanban_{slug(st.session_state.nombre_proj)}.csv", "text/csv", **ANCHO)
 
-# ------------------------------------------
-# TAB 4: MONTE CARLO (AVANZADO, CONFIGURABLE Y COMPLETO)
-# ------------------------------------------
+# ---------------------------------------------------------------------
+# TAB 4: MONTE CARLO
+# ---------------------------------------------------------------------
 with tab4:
-    st.markdown("### 🎲 Simulación Monte Carlo de Tiempos y Presupuestos")
-    st.caption("Motor de análisis probabilístico de riesgo, factibilidad y capacidad proyectada.")
+    seccion("Simulación Monte Carlo de plazo y presupuesto",
+            "Simula miles de versiones posibles del proyecto para responder dos preguntas: "
+            "¿qué probabilidad hay de terminar a tiempo y dentro del presupuesto? y ¿qué plazo conviene comprometer?")
 
-    # GUÍA EXPLICATIVA INTUITIVA
-    with st.expander("📖 **Guía Intuitiva: ¿Cómo entender la Simulación Monte Carlo?**", expanded=False):
+    with st.expander("¿Cómo funciona y cómo leer los resultados?", expanded=False):
         st.markdown("""
-        **¿Qué es Monte Carlo?** Es un método estadístico que ejecuta miles de escenarios simulados (iteraciones) variando los tiempos y costos según la incertidumbre real del proyecto.
-        
-        * **Modelos de Distribución:**
-            * 📐 **Triangular:** Basada en 3 estimaciones simples (Optimista, Más Probable, Pesimista).
-            * 📊 **Beta-PERT:** Estándar de la metodología PMBOK. Da más peso visual al valor 'Más Probable'.
-            * 🔔 **Normal / Gaussiana:** Para procesos maduros con comportamiento en campana (Media y Desviación).
-            * 🟦 **Uniforme:** Incertidumbre total, cualquier duración entre el Mínimo y Máximo es igual de probable.
-        * **Percentiles Clave:**
-            * **P50 (Mediana):** 50% de probabilidad de terminar antes de este tiempo. Es como tirar una moneda.
-            * **P85 (Compromiso Recomendado):** Estándar de la industria. 85% de probabilidad de éxito.
-            * **P95 (Escenario Pesimista):** Cubre el 95% de todos los imprevistos y bloqueos posibles.
+**La idea.** En vez de una sola estimación ("tardaremos 20 días"), defines un rango de incertidumbre.
+El motor sortea miles de duraciones dentro de ese rango, como si ejecutaras el proyecto miles de veces, y cuenta cuántas veces se cumplen tus metas.
+
+**Distribuciones disponibles**
+- **Beta-PERT** (recomendada, estándar PMBOK): usa optimista, más probable y pesimista, y concentra los resultados cerca del valor más probable.
+- **Triangular**: mismos tres valores, pero da más peso a los extremos. Es más conservadora.
+- **Normal**: para procesos conocidos, definidos por un promedio y una desviación.
+- **Uniforme**: cuando no sabes nada más que el mínimo y el máximo.
+
+**Percentiles (P)**
+- **P50**: la mitad de los escenarios termina antes. Es una apuesta 50/50, no un compromiso.
+- **P85** (u otro que elijas): el plazo que puedes prometer con esa confianza. Es el estándar de la industria.
+- **P95**: cubre casi todos los imprevistos; útil como escenario pesimista.
+
+**Reserva de contingencia**: la diferencia entre el P50 y el percentil de compromiso. Es el colchón de tiempo y dinero que conviene negociar.
         """)
 
-    st.write("---")
+    # ---------------- Paso 1: estimación ----------------
+    with st.container(border=True):
+        paso(1, "Estimación de la duración")
+        fuente = st.radio("Fuente de la estimación", ["Estimación manual (3 puntos)", "Desde la EDT (por paquete)"],
+                          horizontal=True, key="mc_fuente",
+                          help="La opción EDT simula cada paquete de trabajo por separado y suma sus duraciones.")
+        desde_edt = fuente.startswith("Desde")
 
-    # CONFIGURACIÓN COMPLETA DE PARÁMETROS
-    c_sec1, c_sec2, c_sec3 = st.columns([1.2, 1.2, 1])
+        c_e1, c_e2 = st.columns([1, 2])
+        with c_e1:
+            tipo_dist = st.selectbox("Distribución", DISTRIBUCIONES, key="mc_dist_type",
+                                     help="Modelo matemático con el que se sortea la incertidumbre.")
+        with c_e2:
+            valido, error_msg = True, ""
+            parametros_txt = ""
+            if desde_edt:
+                ce1, ce2, ce3 = st.columns(3)
+                horas_dia = ce1.number_input("Horas de trabajo por día", 1.0, 24.0, 8.0, 0.5, key="mc_horas_dia")
+                pct_opt = ce2.slider("Mejor caso (% menos)", 0, 80, 20, 5, key="mc_pct_opt",
+                                     help="Cuánto más rápido podría salir cada paquete si todo va bien.")
+                pct_pes = ce3.slider("Peor caso (% más)", 0, 300, 60, 10, key="mc_pct_pes",
+                                     help="Cuánto más podría tardar cada paquete si hay problemas.")
+                paquetes = tuple((str(e.get("Paquete", f"Paquete {i + 1}")) or f"Paquete {i + 1}",
+                                  float(e.get("Horas", 0) or 0), float(e.get("Costo", 0) or 0))
+                                 for i, e in enumerate(st.session_state.edt_list))
+                base_h = sum(p[1] for p in paquetes)
+                if not paquetes or base_h <= 0:
+                    valido, error_msg = False, "La EDT no tiene paquetes con horas. Agrégalos en la pestaña EDT (WBS) o usa la estimación manual."
+                else:
+                    st.caption(f"Base de la EDT: {len(paquetes)} paquetes, {fmt_num(base_h, 1)} horas ≈ "
+                               f"{fmt_num(base_h / horas_dia, 1)} días de trabajo si se ejecutan uno tras otro.")
+                parametros_txt = f"{horas_dia} h/día, mejor caso −{pct_opt}%, peor caso +{pct_pes}%"
+            elif tipo_dist in ("Triangular", "Beta-PERT"):
+                ce1, ce2, ce3 = st.columns(3)
+                mc_opt = ce1.number_input("Optimista (días)", min_value=0.5, value=10.0, step=1.0, key="mc_opt")
+                mc_prob = ce2.number_input("Más probable (días)", min_value=0.5, value=20.0, step=1.0, key="mc_prob")
+                mc_pes = ce3.number_input("Pesimista (días)", min_value=0.5, value=45.0, step=1.0, key="mc_pes")
+                if not (mc_opt <= mc_prob <= mc_pes) or mc_opt >= mc_pes:
+                    valido, error_msg = False, "Revisa los valores: optimista ≤ más probable ≤ pesimista, y optimista < pesimista."
+                else:
+                    st.caption(f"Estimación PERT clásica (O + 4M + P) / 6 = {fmt_num((mc_opt + 4 * mc_prob + mc_pes) / 6, 1)} días.")
+                parametros_txt = f"O={fmt_num(mc_opt, 1)}, M={fmt_num(mc_prob, 1)}, P={fmt_num(mc_pes, 1)} días"
+            elif tipo_dist == "Normal":
+                ce1, ce2 = st.columns(2)
+                mc_mean = ce1.number_input("Duración promedio (días)", min_value=1.0, value=22.0, step=1.0, key="mc_mean")
+                mc_std = ce2.number_input("Desviación estándar (días)", min_value=0.1, value=5.0, step=0.5, key="mc_std")
+                st.caption(f"El 95% de los escenarios caerá aprox. entre {fmt_num(max(mc_mean - 2 * mc_std, 0.5), 1)} "
+                           f"y {fmt_num(mc_mean + 2 * mc_std, 1)} días.")
+                parametros_txt = f"media={fmt_num(mc_mean, 1)}, desv.={fmt_num(mc_std, 1)} días"
+            else:
+                ce1, ce2 = st.columns(2)
+                mc_min = ce1.number_input("Mínimo (días)", min_value=0.5, value=12.0, step=1.0, key="mc_min_u")
+                mc_max = ce2.number_input("Máximo (días)", min_value=0.5, value=40.0, step=1.0, key="mc_max_u")
+                if mc_min >= mc_max:
+                    valido, error_msg = False, "El mínimo debe ser menor que el máximo."
+                parametros_txt = f"mín={fmt_num(mc_min, 1)}, máx={fmt_num(mc_max, 1)} días"
 
-    with c_sec1:
-        st.markdown("##### 📐 1. Modelo Estadístico & Tiempos")
-        tipo_dist = st.selectbox(
-            "Distribución Probabilística",
-            ["Triangular", "Beta-PERT", "Normal", "Uniforme"],
-            key="mc_dist_type",
-            help="Selecciona el modelo matemático para generar la variabilidad aleatoria"
-        )
+    # ---------------- Paso 2: costos y metas ----------------
+    with st.container(border=True):
+        paso(2, "Costos y metas a evaluar")
+        cc1, cc2, cc3 = st.columns(3)
+        with cc1:
+            st.markdown("**Costos**")
+            costo_fijo = st.number_input("Costo fijo base ($)", min_value=0, value=100000, step=10000, key="mc_cfijo")
+            if desde_edt:
+                st.caption("El costo variable sale de cada paquete de la EDT y crece si el paquete se demora.")
+                costo_diario, var_costo = 0, 0
+            else:
+                costo_diario = st.number_input("Costo operativo por día ($)", min_value=0, value=15000, step=1000, key="mc_cdiario")
+                var_costo = st.slider("Variabilidad del costo diario (±%)", 0, 30, 5, key="mc_var_costo",
+                                      help="Imprevistos en el gasto diario, independientes de la duración.")
+        with cc2:
+            st.markdown("**Metas**")
+            dias_meta = st.number_input("Plazo meta (días)", min_value=0.5, value=25.0, step=1.0, key="mc_dias_meta")
+            costo_meta = st.number_input("Presupuesto meta ($)", min_value=0, value=500000, step=25000, key="mc_costo_meta")
+            percentil_target = st.slider("Confianza exigida (percentil)", 50, 99, 85, step=1, key="mc_target_perc",
+                                         help="Con qué probabilidad quieres poder cumplir lo que prometas.")
+        with cc3:
+            st.markdown("**Calendario**")
+            fecha_inicio = st.date_input("Fecha de inicio", value=date.today(), key="mc_f_inicio", format="DD/MM/YYYY")
+            habiles = st.toggle("Contar solo días hábiles (lun–vie)", value=True, key="mc_habiles")
+            st.caption("Afecta las fechas de término y la capacidad anual.")
 
-        if tipo_dist in ["Triangular", "Beta-PERT"]:
-            mc_opt = st.number_input("Días Optimista (Mínimo)", value=10, min_value=1, key="mc_opt")
-            mc_prob = st.number_input("Días Más Probable (Moda)", value=20, min_value=1, key="mc_prob")
-            mc_pes = st.number_input("Días Pesimista (Máximo)", value=45, min_value=1, key="mc_pes")
-        elif tipo_dist == "Normal":
-            mc_mean = st.number_input("Duración Promedio (Días)", value=22.0, min_value=1.0, key="mc_mean")
-            mc_std = st.number_input("Desviación Estándar (Días)", value=5.0, min_value=0.1, key="mc_std")
-        elif tipo_dist == "Uniforme":
-            mc_min = st.number_input("Días Mínimos", value=12, min_value=1, key="mc_min_u")
-            mc_max = st.number_input("Días Máximos", value=40, min_value=1, key="mc_max_u")
+    # ---------------- Paso 3: motor ----------------
+    with st.container(border=True):
+        paso(3, "Motor de simulación")
+        cm1, cm2, cm3 = st.columns([3, 1.3, 1])
+        simulaciones = cm1.select_slider("Número de iteraciones", options=[500, 1000, 2000, 5000, 10000, 20000, 50000],
+                                         value=10000, key="mc_sims",
+                                         help="Más iteraciones dan resultados más estables. 10.000 suele bastar.")
+        usar_semilla = cm2.toggle("Resultados reproducibles", value=True, key="mc_seed",
+                                  help="Usa siempre la misma semilla aleatoria para obtener los mismos números.")
+        if not usar_semilla:
+            if cm3.button("🎲 Nueva corrida", **ANCHO):
+                st.session_state.mc_semilla_val = int(np.random.default_rng().integers(1, 10**9))
+        semilla = 42 if usar_semilla else st.session_state.mc_semilla_val
 
-    with c_sec2:
-        st.markdown("##### 💰 2. Modelo Financiero / Costos")
-        costo_fijo = st.number_input("Costo Fijo Base del Proyecto ($)", value=100000, step=10000, key="mc_cfijo")
-        costo_diario = st.number_input("Costo Operativo por Día ($/Día)", value=15000, step=1000, key="mc_cdiario")
-        costo_meta = st.number_input("Presupuesto Límite Meta ($)", value=500000, step=25000, key="mc_costo_meta")
+    if not valido:
+        st.error(error_msg)
+    else:
+        with st.spinner("Simulando escenarios…"):
+            if desde_edt:
+                res = simular_edt(paquetes, float(horas_dia), float(pct_opt), float(pct_pes), tipo_dist,
+                                  int(simulaciones), float(costo_fijo), int(semilla))
+            elif tipo_dist == "Normal":
+                res = simular_manual(tipo_dist, float(mc_mean), float(mc_std), 0.0, int(simulaciones),
+                                     float(costo_fijo), float(costo_diario), float(var_costo), int(semilla))
+            elif tipo_dist == "Uniforme":
+                res = simular_manual(tipo_dist, float(mc_min), 0.0, float(mc_max), int(simulaciones),
+                                     float(costo_fijo), float(costo_diario), float(var_costo), int(semilla))
+            else:
+                res = simular_manual(tipo_dist, float(mc_opt), float(mc_prob), float(mc_pes), int(simulaciones),
+                                     float(costo_fijo), float(costo_diario), float(var_costo), int(semilla))
 
-    with c_sec3:
-        st.markdown("##### 📅 3. Metas & Calendario")
-        fecha_inicio = st.date_input("Fecha de Inicio", value=pd.to_datetime("today"), key="mc_f_inicio")
-        dias_meta = st.number_input("Días Meta (SLA Tiempo)", value=25, min_value=1, key="mc_dias_meta")
-        percentil_target = st.slider("Percentil de Compromiso (%)", 50, 99, 85, step=5, key="mc_target_perc")
+        dias, costos = res["dias"], res["costos"]
+        perc = int(percentil_target)
+        met = calcular_metricas(dias, costos, dias_meta, costo_meta, perc)
+        f_p50 = fecha_fin(fecha_inicio, met["p50"], habiles)
+        f_pt = fecha_fin(fecha_inicio, met["pt"], habiles)
+        f_p95 = fecha_fin(fecha_inicio, met["p95"], habiles)
+        cfg = {
+            "proyecto": st.session_state.nombre_proj, "fuente": fuente, "dist": tipo_dist,
+            "parametros": parametros_txt, "dias_meta": float(dias_meta), "costo_meta": float(costo_meta),
+            "perc": perc, "inicio": str(fecha_inicio), "habiles": bool(habiles),
+        }
+        MC_ACTUAL = {"res": res, "met": met, "cfg": cfg, "fecha_pt": f_pt}
 
-    # MUESTREO Y CONTROL
-    st.markdown("##### ⚙️ 4. Muestreo & Motor de Cálculo")
-    col_s1, col_s2 = st.columns([3, 1])
-    simulaciones = col_s1.slider("Número de Simulaciones (Iteraciones)", 500, 20000, 5000, step=500, key="mc_sims")
-    usar_semilla = col_s2.checkbox("Fijar Semilla (Reproducible)", value=True, key="mc_seed")
+        ok_t = dias <= dias_meta
+        ok_c = costos <= costo_meta
 
-    # VALIDACIÓN Y GENERACIÓN DE SIMULACIONES
-    valido = True
-    if tipo_dist in ["Triangular", "Beta-PERT"] and not (mc_opt <= mc_prob <= mc_pes):
-        st.error("Error: Se debe cumplir que Días Optimista ≤ Días Más Probable ≤ Días Pesimista.")
-        valido = False
-    elif tipo_dist == "Uniforme" and not (mc_min < mc_max):
-        st.error("Error: Se debe cumplir que Días Mínimos < Días Máximos.")
-        valido = False
+        # ---------------- Veredicto ----------------
+        st.write("")
+        nivel, titulo_v = veredicto(met, perc)
+        color_v = T[nivel]
+        n_ok = int(round(met["prob_ambos"]))
+        n_mid = int(round(met["prob_ambos"] + met["prob_uno"])) - n_ok
+        n_mid = max(0, min(n_mid, 100 - n_ok))
+        puntos = "".join(f'<span class="dot {c}"></span>' for c in ["ok"] * n_ok + ["mid"] * n_mid + ["bad"] * (100 - n_ok - n_mid))
 
-    if valido:
-        if usar_semilla:
-            np.random.seed(42)
-
-        # Generación aleatoria de duraciones según la distribución
-        if tipo_dist == "Triangular":
-            datos_dias = np.random.triangular(left=mc_opt, mode=mc_prob, right=mc_pes, size=simulaciones)
-        elif tipo_dist == "Beta-PERT":
-            # Parámetros Beta-PERT
-            a = 1 + 4 * (mc_prob - mc_opt) / (mc_pes - mc_opt) if (mc_pes > mc_opt) else 1
-            b = 1 + 4 * (mc_pes - mc_prob) / (mc_pes - mc_opt) if (mc_pes > mc_opt) else 1
-            datos_dias = mc_opt + np.random.beta(a, b, size=simulaciones) * (mc_pes - mc_opt)
-        elif tipo_dist == "Normal":
-            datos_dias = np.random.normal(loc=mc_mean, scale=mc_std, size=simulaciones)
-            datos_dias = np.clip(datos_dias, 1.0, None)  # Evitar días menores a 1
-        elif tipo_dist == "Uniforme":
-            datos_dias = np.random.uniform(low=mc_min, high=mc_max, size=simulaciones)
-
-        # Cálculo de costos por simulación
-        # Se agrega un margen de variabilidad aleatoria del 5% al costo diario por imprevistos
-        variabilidad_costo = np.random.normal(1.0, 0.05, size=simulaciones)
-        datos_costos = costo_fijo + (datos_dias * costo_diario * variabilidad_costo)
-
-        # CÁLCULO DE METRICAS PRINCIPALES
-        p50 = np.percentile(datos_dias, 50)
-        p_target = np.percentile(datos_dias, percentil_target)
-        p95 = np.percentile(datos_dias, 95)
-
-        p50_cost = np.percentile(datos_costos, 50)
-        p_target_cost = np.percentile(datos_costos, percentil_target)
-        p95_cost = np.percentile(datos_costos, 95)
-
-        exitos_tiempo = (datos_dias <= dias_meta).sum()
-        tasa_exito_tiempo = (exitos_tiempo / simulaciones) * 100
-        riesgo_retraso = 100 - tasa_exito_tiempo
-
-        exitos_costo = (datos_costos <= costo_meta).sum()
-        tasa_exito_costo = (exitos_costo / simulaciones) * 100
-
-        exitos_ambos = ((datos_dias <= dias_meta) & (datos_costos <= costo_meta)).sum()
-        tasa_exito_conjunta = (exitos_ambos / simulaciones) * 100
-
-        fecha_p50 = fecha_inicio + pd.Timedelta(days=int(np.round(p50)))
-        fecha_target = fecha_inicio + pd.Timedelta(days=int(np.round(p_target)))
-        fecha_p95 = fecha_inicio + pd.Timedelta(days=int(np.round(p95)))
-
-        st.write("---")
-        st.markdown("#### 📊 Diagnóstico Ejecutivo & Veredicto de Viabilidad")
-
-        # Tarjeta dinámica de veredicto
-        if tasa_exito_conjunta >= 80:
-            v_color, v_title = "🟢", "PROYECTO ALTAMENTE VIABLE"
-            v_msg = f"Alta certidumbre: {tasa_exito_tiempo:.1f}% de éxito en plazo y {tasa_exito_costo:.1f}% en presupuesto."
-        elif tasa_exito_conjunta >= 50:
-            v_color, v_title = "🟡", "VIABLE CON RIESGO MODERADO"
-            v_msg = f"Factible pero ajustado: Se recomienda reservar una contingencia hasta el percentil P{percentil_target} ({p_target:.1f} días)."
+        if nivel == "ok":
+            recomendacion = (f"Puedes comprometer <b>{fmt_num(met['pt'], 1)} días</b> (término el <b>{f_pt.strftime('%d/%m/%Y')}</b>) "
+                             f"y <b>{fmt_money(met['ptc'])}</b> con un {perc}% de confianza, dentro de tus metas.")
         else:
-            v_color, v_title = "🔴", "ALTO RIESGO DE INCUMPLIMIENTO"
-            v_msg = f"Incertidumbre elevada: El riesgo de retraso es del {riesgo_retraso:.1f}%. Ajusta la meta a {p_target:.0f} días o amplía el presupuesto."
+            falta = []
+            if met["pt"] > dias_meta:
+                falta.append(f"ampliar el plazo a <b>{fmt_num(np.ceil(met['pt']), 0)} días</b>")
+            if met["ptc"] > costo_meta:
+                falta.append(f"ampliar el presupuesto a <b>{fmt_money(met['ptc'])}</b>")
+            recomendacion = (f"Para alcanzar un {perc}% de confianza habría que " + " y ".join(falta) + ", o reducir el alcance."
+                             if falta else
+                             f"Cada meta por separado se cumple con {perc}% de confianza, pero ambas a la vez no: "
+                             "revisa la holgura de plazo o presupuesto.")
 
-        st.info(f"### {v_color} {v_title}\n{v_msg}")
-
-        # Tarjetas de Métricas
-        m1, m2, m3, m4, m5 = st.columns(5)
-        m1.metric("🎯 Éxito en Tiempo", f"{tasa_exito_tiempo:.1f}%", f"Meta: {dias_meta}d")
-        m2.metric("⚠️ Riesgo de Retraso", f"{riesgo_retraso:.1f}%", f"Riesgo de Tiempo", delta_color="inverse")
-        m3.metric("💰 Éxito en Presupuesto", f"{tasa_exito_costo:.1f}%", f"Meta: ${costo_meta:,.0f}")
-        m4.metric(f"📆 Entrega P{percentil_target}", fecha_target.strftime("%d/%m/%Y"), f"{p_target:.1f} días")
-        m5.metric(f"💵 Presupuesto P{percentil_target}", f"${p_target_cost:,.0f}", f"P50: ${p50_cost:,.0f}")
-
-        st.write("---")
-
-        # GRÁFICOS INTERACTIVOS CON TABULADORES
-        st.markdown("#### 📈 Panel de Gráficos y Análisis de Distribución")
-        v_tab1, v_tab2, v_tab3 = st.tabs(["📊 Histograma (PDF)", "📈 Curva S Acumulada (CDF)", "💥 Dispersión Tiempo vs Costo"])
-
-        with v_tab1:
-            fig_hist = go.Figure()
-            fig_hist.add_trace(go.Histogram(
-                x=datos_dias,
-                nbinsx=40,
-                name="Simulaciones",
-                marker=dict(color=graph_bar, opacity=0.75, line=dict(color=heading_color, width=1)),
-                hovertemplate="Duración: %{x:.1f} días<br>Escenarios: %{y}<extra></extra>"
-            ))
-            fig_hist.add_vline(x=dias_meta, line_dash="dash", line_color="#ef4444", line_width=2,
-                               annotation_text=f"Meta ({dias_meta}d)", annotation_position="top left")
-            fig_hist.add_vline(x=p50, line_dash="dot", line_color="#f59e0b", line_width=2,
-                               annotation_text=f"P50 ({p50:.1f}d)", annotation_position="top right")
-            fig_hist.add_vline(x=p_target, line_dash="solid", line_color="#10b981", line_width=2.5,
-                               annotation_text=f"P{percentil_target} ({p_target:.1f}d)", annotation_position="top right")
-
-            fig_hist.update_layout(
-                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color=graph_text,
-                xaxis=dict(title="Días Estimados de Ejecución", gridcolor=grid_color),
-                yaxis=dict(title="Frecuencia (N° Muestras)", gridcolor=grid_color),
-                margin=dict(l=20, r=20, t=30, b=20), height=360, showlegend=False
-            )
-            st.plotly_chart(fig_hist, use_container_width=True)
-
-        with v_tab2:
-            # Curva S (CDF)
-            dias_sorted = np.sort(datos_dias)
-            prob_acumulada = np.arange(1, len(dias_sorted) + 1) / len(dias_sorted) * 100
-
-            fig_cdf = go.Figure()
-            fig_cdf.add_trace(go.Scatter(
-                x=dias_sorted, y=prob_acumulada, mode='lines',
-                line=dict(color=graph_bar, width=3),
-                hovertemplate="Días: %{x:.1f}<br>Probabilidad Cumplimiento: %{y:.1f}%<extra></extra>"
-            ))
-            fig_cdf.add_hline(y=percentil_target, line_dash="dash", line_color="#10b981",
-                              annotation_text=f"Objetivo {percentil_target}%", annotation_position="bottom right")
-            fig_cdf.add_vline(x=dias_meta, line_dash="dash", line_color="#ef4444",
-                              annotation_text=f"Meta ({dias_meta}d)", annotation_position="top left")
-
-            fig_cdf.update_layout(
-                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color=graph_text,
-                xaxis=dict(title="Días de Ejecución", gridcolor=grid_color),
-                yaxis=dict(title="Probabilidad Acumulada de Éxito (%)", gridcolor=grid_color, range=[0, 105]),
-                margin=dict(l=20, r=20, t=30, b=20), height=360, showlegend=False
-            )
-            st.plotly_chart(fig_cdf, use_container_width=True)
-
-        with v_tab3:
-            # Scatter Plot de Tiempo vs Costo
-            # Muestrear máximo 1000 puntos para rendimiento visual limpio
-            indices_sample = np.random.choice(simulaciones, size=min(1000, simulaciones), replace=False)
-            df_scatter = pd.DataFrame({
-                "Días": datos_dias[indices_sample],
-                "Costo": datos_costos[indices_sample]
-            })
-
-            fig_scatter = px.scatter(
-                df_scatter, x="Días", y="Costo",
-                color_discrete_sequence=[graph_bar],
-                opacity=0.6,
-                labels={"Días": "Duración (Días)", "Costo": "Costo Total ($)"}
-            )
-            fig_scatter.add_vline(x=dias_meta, line_dash="dash", line_color="#ef4444", annotation_text="Límite Tiempo")
-            fig_scatter.add_hline(y=costo_meta, line_dash="dash", line_color="#ef4444", annotation_text="Límite Costo")
-
-            fig_scatter.update_layout(
-                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color=graph_text,
-                xaxis=dict(gridcolor=grid_color), yaxis=dict(gridcolor=grid_color),
-                margin=dict(l=20, r=20, t=30, b=20), height=360
-            )
-            st.plotly_chart(fig_scatter, use_container_width=True)
-
-        st.write("---")
-
-        # INSPECCIÓN INDIVIDUAL (PESCAR ITERACIÓN) & ANÁLISIS DE EXTREMOS
-        col_p1, col_p2 = st.columns([1.2, 1])
-
-        with col_p1:
-            st.markdown("#### 🎣 Pescar e Inspeccionar Iteración")
-            st.caption("Selecciona una iteración puntual para auditar cómo se comporta una muestra aleatoria específica.")
-
-            iter_idx = st.slider("Número de Iteración", 1, simulaciones, 100, key="mc_slider_iter")
-            val_iter_dias = datos_dias[iter_idx - 1]
-            val_iter_costo = datos_costos[iter_idx - 1]
-            fecha_iter = fecha_inicio + pd.Timedelta(days=int(np.round(val_iter_dias)))
-
-            cumple_tiempo = val_iter_dias <= dias_meta
-            cumple_costo = val_iter_costo <= costo_meta
-
-            st.markdown(f"""
-            * 📌 **Iteración Auditada:** **#{iter_idx}** de {simulaciones}
-            * ⏱️ **Duración Resultante:** **{val_iter_dias:.1f} Días**
-            * 💵 **Costo Estimado:** **${val_iter_costo:,.0f}**
-            * 📆 **Fecha Proyectada de Término:** **{fecha_iter.strftime('%d/%m/%Y')}**
-            * 🏁 **Resultado Tiempo:** {"🟢 Cumple Meta" if cumple_tiempo else "🔴 Retrasado"}
-            * 💳 **Resultado Presupuesto:** {"🟢 Dentro de Presupuesto" if cumple_costo else "🔴 Sobrecosto"}
-            """)
-
-        with col_p2:
-            st.markdown("#### 🚀 Proyección Anual (1 Año) y Capacidad")
-            dias_laborables_opcion = st.radio("Tipo de Calendario Anual", ["Días Hábiles (250 días/año)", "Días Corridos (365 días/año)"], horizontal=True, key="mc_cal_type")
-            dias_ano_base = 250 if "250" in dias_laborables_opcion else 365
-
-            ciclos_ano_p50 = dias_ano_base / p50 if p50 > 0 else 0
-            ciclos_ano_target = dias_ano_base / p_target if p_target > 0 else 0
-
-            st.markdown(f"""
-            * 🔄 **Capacidad Mediana (P50):** **{ciclos_ano_p50:.1f} Proyectos / Año**
-            * 🛡️ **Capacidad Segura (P{percentil_target}):** **{ciclos_ano_target:.1f} Proyectos / Año**
-            * 💡 **Margen de Seguridad:** Utilizar el percentil P{percentil_target} garantiza que el equipo cumplirá sus metas anuales con solo un **{100 - percentil_target}% de riesgo de imprevistos**.
-            """)
-
-        st.write("---")
-
-        # TABLA DE CASOS EXTREMOS (TOP 5 MEJORES / PEORES)
-        st.markdown("#### 🔍 Tabla de Auditoría: Escenarios Extremos")
-        df_all_sims = pd.DataFrame({
-            "N° Iteración": np.arange(1, simulaciones + 1),
-            "Duración (Días)": np.round(datos_dias, 1),
-            "Costo Total ($)": np.round(datos_costos, 0),
-            "Cumple Tiempo": datos_dias <= dias_meta,
-            "Cumple Costo": datos_costos <= costo_meta
-        })
-
-        t_col1, t_col2 = st.columns(2)
-        with t_col1:
-            st.markdown("**Top 5 Escenarios Más Rápidos (Optimistas)**")
-            st.dataframe(df_all_sims.sort_values(by="Duración (Días)").head(5), use_container_width=True, hide_index=True)
-
-        with t_col2:
-            st.markdown("**Top 5 Escenarios Más Lentos (Pesimistas)**")
-            st.dataframe(df_all_sims.sort_values(by="Duración (Días)", ascending=False).head(5), use_container_width=True, hide_index=True)
-
-        # DESCARGA INDIVIDUAL - TAB 4
-        st.write("---")
-        st.markdown("#### 📥 Exportar Punto 4: Resultados Monte Carlo")
-        c_dmc1, _ = st.columns([1, 1])
-        with c_dmc1:
-            st.download_button(
-                label="📊 Descargar Simulación Monte Carlo en Excel (.xlsx)",
-                data=generar_excel_montecarlo(datos_dias, datos_costos),
-                file_name=f"MonteCarlo_{st.session_state.nombre_proj.replace(' ', '_')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
-
-# ------------------------------------------
-# TAB 5: FLUJOS
-# ------------------------------------------
-with tab5:
-    st.markdown("### Diagramas de Flujo y Secuencia")
-    
-    st.selectbox(
-        "Seleccionar Plantilla de Flujo", 
-        options=list(PLANTILLAS_FLUJO.keys()),
-        key="select_tipo_flujo",
-        on_change=cambiar_plantilla_flujo
-    )
-    
-    codigo_actualizado = st.text_area(
-        "Código del Diagrama (Editable)", 
-        value=st.session_state.flujo_codigo, 
-        height=180,
-        key="txt_flujo_code"
-    )
-    st.session_state.flujo_codigo = codigo_actualizado
-    
-    st.markdown("#### Vista Previa del Diagrama")
-    st_mermaid(st.session_state.flujo_codigo)
-
-    # DESCARGA INDIVIDUAL - TAB 5
-    st.write("---")
-    st.markdown("#### 📥 Exportar Punto 5: Diagrama de Flujos")
-    c_df1, _ = st.columns([1, 1])
-    with c_df1:
-        st.download_button(
-            label="📌 Descargar Diagrama de Flujo (.mmd)",
-            data=st.session_state.flujo_codigo.encode('utf-8'),
-            file_name=f"Flujo_Secuencia_{st.session_state.nombre_proj.replace(' ', '_')}.mmd",
-            mime="text/plain",
-            use_container_width=True
+        st.markdown(
+            f'<div class="md-verdict" style="--c:{color_v};--cb:{rgba(color_v, 0.13)}">'
+            f'<div><span class="v-tag">{titulo_v}</span>'
+            f'<div class="v-big">De cada 100 escenarios simulados, <b>{n_ok}</b> terminan a tiempo y dentro del presupuesto.</div>'
+            f'<div class="v-txt">{recomendacion}<br>Reserva de contingencia sugerida: '
+            f'<b>+{fmt_num(met["reserva_dias"], 1)} días</b> y <b>+{fmt_money(met["reserva_costo"])}</b> sobre la mediana.</div></div>'
+            f'<div class="dotwrap"><div class="dotgrid">{puntos}</div>'
+            f'<div class="dotleg"><span><i style="background:{T["ok"]}"></i>Cumple ambas</span>'
+            f'<span><i style="background:{T["warn"]}"></i>Cumple una</span>'
+            f'<span><i style="background:{T["bad"]}"></i>Ninguna</span></div></div></div>',
+            unsafe_allow_html=True,
         )
 
-# ------------------------------------------
-# TAB 6: EDT (WBS) - MULTINIVEL & MINIMALISTA
-# ------------------------------------------
+        # ---------------- KPIs ----------------
+        st.write("")
+        k1, k2, k3, k4 = st.columns(4)
+        kpi(k1, "Entrega probable (P50)", f"{fmt_num(met['p50'], 1)} días",
+            f"Término {f_p50.strftime('%d/%m/%Y')} · apuesta 50/50", T["sub"])
+        kpi(k2, f"Plazo a comprometer (P{perc})", f"{fmt_num(met['pt'], 1)} días",
+            f"Término {f_pt.strftime('%d/%m/%Y')}", T["accent"])
+        kpi(k3, "Escenario pesimista (P95)", f"{fmt_num(met['p95'], 1)} días",
+            f"Término {f_p95.strftime('%d/%m/%Y')}", T["warn"])
+        kpi(k4, f"Presupuesto a comprometer (P{perc})", fmt_money(met["ptc"]),
+            f"Mediana {fmt_money(met['p50c'])}", T["accent2"])
+
+        # ---------------- Indicadores tipo velocímetro ----------------
+        def color_prob(v):
+            return T["ok"] if v >= perc else (T["warn"] if v >= 50 else T["bad"])
+
+        fig_g = go.Figure()
+        for i, (val, tit) in enumerate([(met["prob_t"], f"Cumplir plazo ({fmt_num(dias_meta, 0)} días)"),
+                                        (met["prob_c"], f"Cumplir presupuesto ({fmt_money(costo_meta)})"),
+                                        (met["prob_ambos"], "Cumplir ambos")]):
+            fig_g.add_trace(go.Indicator(
+                mode="gauge+number", value=val,
+                number={"suffix": "%", "valueformat": ".1f", "font": {"size": 30, "color": color_prob(val)}},
+                title={"text": tit, "font": {"size": 14, "color": T["sub"]}},
+                domain={"x": [i / 3 + 0.04, (i + 1) / 3 - 0.04], "y": [0, 1]},
+                gauge={
+                    "axis": {"range": [0, 100], "tickcolor": T["sub"], "tickwidth": 1, "ticksuffix": "%"},
+                    "bar": {"color": color_prob(val), "thickness": 0.28},
+                    "bgcolor": "rgba(0,0,0,0)", "borderwidth": 0,
+                    "steps": [{"range": [0, 50], "color": rgba(T["bad"], 0.12)},
+                              {"range": [50, perc], "color": rgba(T["warn"], 0.12)},
+                              {"range": [perc, 100], "color": rgba(T["ok"], 0.12)}],
+                    "threshold": {"line": {"color": T["text"], "width": 3}, "thickness": 0.85, "value": perc},
+                },
+            ))
+        estilo_fig(fig_g, height=230, margin=dict(l=20, r=20, t=50, b=0))
+        mostrar_fig(fig_g)
+        st.caption(f"La marca vertical en cada indicador es tu confianza exigida (P{perc}). "
+                   "Verde: la supera · Ámbar: entre 50% y la meta · Rojo: menos de 50%.")
+
+        # ---------------- Gráficos ----------------
+        st.write("")
+        seccion("Explorar los resultados")
+        nombres_tabs = ["Distribución del plazo", "Curva S y calculadora", "Plazo vs. costo", "Distribución del costo",
+                        "Convergencia"]
+        if res["componentes"] is not None:
+            nombres_tabs.append("Sensibilidad por paquete")
+        g_tabs = st.tabs(nombres_tabs)
+
+        def marcar(fig, marcas):
+            for i, (x, txt, col, dash) in enumerate(marcas):
+                fig.add_vline(x=x, line_color=col, line_dash=dash, line_width=2)
+                fig.add_annotation(x=x, y=1 - i * 0.085, yref="paper", text=txt, showarrow=False, xanchor="left",
+                                   xshift=5, font=dict(color=col, size=12), bgcolor=rgba(T["card"], 0.85))
+
+        def histograma_coloreado(datos, meta, etiqueta_x, es_dinero=False):
+            conteos, bordes = np.histogram(datos, bins=45)
+            centros = (bordes[:-1] + bordes[1:]) / 2
+            pct = conteos / len(datos) * 100
+            ancho = np.diff(bordes)
+            dentro = bordes[1:] <= meta
+            fmt_h = "$%{customdata[0]:,.0f} – $%{customdata[1]:,.0f}" if es_dinero else "%{customdata[0]:.1f} – %{customdata[1]:.1f} días"
+            fig = go.Figure()
+            for mask, nombre, col in [(dentro, "Cumple la meta", T["ok"]), (~dentro, "Excede la meta", T["bad"])]:
+                if mask.any():
+                    fig.add_bar(x=centros[mask], y=pct[mask], width=ancho[mask] * 0.95, name=nombre,
+                                marker=dict(color=rgba(col, 0.75), line=dict(width=0)),
+                                customdata=np.stack([bordes[:-1][mask], bordes[1:][mask]], axis=-1),
+                                hovertemplate=fmt_h + "<br>%{y:.2f}% de los escenarios<extra></extra>")
+            fig.update_layout(barmode="overlay", bargap=0)
+            estilo_fig(fig, height=420)
+            fig.update_xaxes(title=etiqueta_x)
+            fig.update_yaxes(title="% de escenarios", ticksuffix="%")
+            return fig
+
+        with g_tabs[0]:
+            fig_h = histograma_coloreado(dias, dias_meta, "Duración del proyecto (días)")
+            marcar(fig_h, [(dias_meta, f"Meta {fmt_num(dias_meta, 1)} d", T["text"], "dash"),
+                           (met["p50"], f"P50 {fmt_num(met['p50'], 1)} d", T["sub"], "dot"),
+                           (met["pt"], f"P{perc} {fmt_num(met['pt'], 1)} d", T["accent"], "solid"),
+                           (met["p95"], f"P95 {fmt_num(met['p95'], 1)} d", T["warn"], "dot")])
+            mostrar_fig(fig_h)
+            st.caption(f"Cada barra agrupa escenarios con duración parecida. Las barras verdes ({fmt_num(met['prob_t'], 1)}%) "
+                       f"terminan dentro del plazo meta; las rojas ({fmt_num(met['riesgo_t'], 1)}%) se atrasan. "
+                       f"Promedio {fmt_num(met['media'], 1)} días, desviación {fmt_num(met['desv'], 1)} días "
+                       f"(variabilidad {fmt_num(met['cv'], 0)}%).")
+
+        with g_tabs[1]:
+            xs = np.sort(dias)
+            ys = np.arange(1, len(xs) + 1) / len(xs) * 100
+            idx = np.linspace(0, len(xs) - 1, min(len(xs), 700)).astype(int)
+            fig_s = go.Figure()
+            fig_s.add_scatter(x=xs[idx], y=ys[idx], mode="lines", line=dict(color=T["accent"], width=3),
+                              fill="tozeroy", fillcolor=rgba(T["accent"], 0.10), name="Probabilidad acumulada",
+                              hovertemplate="Terminar en ≤ %{x:.1f} días<br>Probabilidad: %{y:.1f}%<extra></extra>")
+            pts = [(met["p50"], 50, "P50", T["sub"]), (met["pt"], perc, f"P{perc}", T["accent"]), (met["p95"], 95, "P95", T["warn"])]
+            fig_s.add_scatter(x=[p[0] for p in pts], y=[p[1] for p in pts], mode="markers+text",
+                              text=[f"{p[2]}: {fmt_num(p[0], 1)} d" for p in pts], textposition="middle left",
+                              marker=dict(size=11, color=[p[3] for p in pts], line=dict(width=2, color=T["card"])),
+                              textfont=dict(color=T["text"]), hoverinfo="skip", showlegend=False)
+            fig_s.add_shape(type="line", x0=dias_meta, x1=dias_meta, y0=0, y1=met["prob_t"],
+                            line=dict(color=T["text"], dash="dash", width=1.5))
+            fig_s.add_shape(type="line", x0=xs.min(), x1=dias_meta, y0=met["prob_t"], y1=met["prob_t"],
+                            line=dict(color=T["text"], dash="dash", width=1.5))
+            fig_s.add_annotation(x=dias_meta, y=met["prob_t"], text=f"Meta: {fmt_num(met['prob_t'], 1)}% de probabilidad",
+                                 showarrow=True, arrowhead=0, ax=60, ay=30, font=dict(color=T["text"]),
+                                 bgcolor=rgba(T["card"], 0.9), bordercolor=T["border"])
+            estilo_fig(fig_s, height=420, showlegend=False)
+            fig_s.update_xaxes(title="Duración del proyecto (días)")
+            fig_s.update_yaxes(title="Probabilidad de terminar a esa fecha o antes", ticksuffix="%", range=[0, 103])
+            mostrar_fig(fig_s)
+            st.caption("Lee la curva así: elige un número de días en el eje horizontal y sube hasta la curva; "
+                       "la altura es la probabilidad de terminar en ese plazo o antes.")
+
+            st.markdown("**Calculadora de confianza**")
+            q1, q2 = st.columns(2)
+            with q1:
+                x_dias = st.number_input("Si me comprometo a … días", min_value=0.5,
+                                         value=float(np.ceil(met["pt"])), step=1.0, key="mc_calc_dias")
+                prob_x = (dias <= x_dias).mean() * 100
+                st.markdown(f'<div class="md-answer">Probabilidad de cumplir: <b>{fmt_num(prob_x, 1)}%</b><br>'
+                            f'Término el {fecha_fin(fecha_inicio, x_dias, habiles).strftime("%d/%m/%Y")}</div>',
+                            unsafe_allow_html=True)
+            with q2:
+                conf = st.slider("Quiero esta confianza (%)", 50, 99, 90, key="mc_calc_conf")
+                d_conf = float(np.percentile(dias, conf))
+                c_conf = float(np.percentile(costos, conf))
+                st.markdown(f'<div class="md-answer">Necesitas: <b>{fmt_num(d_conf, 1)} días</b> y '
+                            f'<b>{fmt_money(c_conf)}</b><br>Término el '
+                            f'{fecha_fin(fecha_inicio, d_conf, habiles).strftime("%d/%m/%Y")}</div>',
+                            unsafe_allow_html=True)
+
+        with g_tabs[2]:
+            cat = np.where(ok_t & ok_c, "Cumple plazo y presupuesto",
+                           np.where(ok_t, "Solo cumple plazo", np.where(ok_c, "Solo cumple presupuesto", "No cumple ninguno")))
+            rng_vis = np.random.default_rng(7)
+            muestra = rng_vis.choice(len(dias), size=min(2500, len(dias)), replace=False)
+            colores_cat = {"Cumple plazo y presupuesto": T["ok"], "Solo cumple plazo": T["accent"],
+                           "Solo cumple presupuesto": T["warn"], "No cumple ninguno": T["bad"]}
+            fig_sc = go.Figure()
+            for nombre_c, col in colores_cat.items():
+                m_full = cat == nombre_c
+                m = m_full[muestra]
+                if not m_full.any():
+                    continue
+                fig_sc.add_trace(go.Scattergl(
+                    x=dias[muestra][m], y=costos[muestra][m], mode="markers",
+                    name=f"{nombre_c} ({fmt_num(m_full.mean() * 100, 1)}%)",
+                    marker=dict(color=rgba(col, 0.55), size=6),
+                    hovertemplate="%{x:.1f} días<br>$%{y:,.0f}<extra></extra>"))
+            fig_sc.add_vline(x=dias_meta, line_dash="dash", line_color=T["text"], line_width=1.5)
+            fig_sc.add_hline(y=costo_meta, line_dash="dash", line_color=T["text"], line_width=1.5)
+            estilo_fig(fig_sc, height=440)
+            fig_sc.update_xaxes(title="Duración (días)")
+            fig_sc.update_yaxes(title="Costo total ($)", tickprefix="$")
+            mostrar_fig(fig_sc)
+            st.caption("Cada punto es un escenario. Las líneas punteadas son tus metas: el cuadrante inferior izquierdo "
+                       "es donde se cumple todo. Se muestran hasta 2.500 puntos; los porcentajes usan todas las iteraciones.")
+
+        with g_tabs[3]:
+            fig_c = histograma_coloreado(costos, costo_meta, "Costo total del proyecto ($)", es_dinero=True)
+            marcar(fig_c, [(costo_meta, f"Meta {fmt_money(costo_meta)}", T["text"], "dash"),
+                           (met["p50c"], f"P50 {fmt_money(met['p50c'])}", T["sub"], "dot"),
+                           (met["ptc"], f"P{perc} {fmt_money(met['ptc'])}", T["accent"], "solid")])
+            fig_c.update_xaxes(tickprefix="$")
+            mostrar_fig(fig_c)
+            st.caption(f"{fmt_num(met['prob_c'], 1)}% de los escenarios queda dentro del presupuesto meta. "
+                       f"Costo promedio: {fmt_money(met['media_c'])}.")
+
+        with g_tabs[4]:
+            cps = np.unique(np.linspace(min(100, len(dias)), len(dias), 70).astype(int))
+            media_run = np.cumsum(dias)[cps - 1] / cps
+            p_run = np.array([np.percentile(dias[:c], perc) for c in cps])
+            fig_cv = go.Figure()
+            fig_cv.add_hrect(y0=met["pt"] * 0.99, y1=met["pt"] * 1.01, fillcolor=rgba(T["accent"], 0.12), line_width=0)
+            fig_cv.add_scatter(x=cps, y=p_run, mode="lines", name=f"P{perc} acumulado", line=dict(color=T["accent"], width=2.5))
+            fig_cv.add_scatter(x=cps, y=media_run, mode="lines", name="Promedio acumulado", line=dict(color=T["sub"], width=2))
+            estilo_fig(fig_cv, height=380)
+            fig_cv.update_xaxes(title="Iteraciones ejecutadas")
+            fig_cv.update_yaxes(title="Días")
+            mostrar_fig(fig_cv)
+            estable = np.all(np.abs(p_run[len(p_run) // 2:] - met["pt"]) <= met["pt"] * 0.01)
+            st.caption(("✅ El resultado es estable: " if estable else "⚠️ El resultado todavía varía: ")
+                       + f"en la segunda mitad de la simulación el P{perc} se mueve "
+                       + ("menos de ±1% (banda sombreada)." if estable else "más de ±1%. Aumenta las iteraciones."))
+
+        if res["componentes"] is not None:
+            with g_tabs[5]:
+                comp = res["componentes"]
+                var_total = np.var(dias)
+                aporte = np.array([np.cov(comp[:, j], dias)[0, 1] / var_total * 100 if var_total > 0 else 0
+                                   for j in range(comp.shape[1])])
+                df_sens = (pd.DataFrame({"Paquete": res["nombres"], "Aporte": aporte,
+                                         "Mediana (días)": np.median(comp, axis=0)})
+                           .sort_values("Aporte").tail(12))
+                fig_t = go.Figure(go.Bar(
+                    x=df_sens["Aporte"], y=df_sens["Paquete"], orientation="h",
+                    marker_color=[T["bad"] if v == df_sens["Aporte"].max() else T["accent"] for v in df_sens["Aporte"]],
+                    text=[f"{fmt_num(v, 1)}%" for v in df_sens["Aporte"]], textposition="outside",
+                    hovertemplate="%{y}<br>Aporte a la incertidumbre: %{x:.1f}%<extra></extra>"))
+                estilo_fig(fig_t, height=max(300, 60 * len(df_sens)), showlegend=False)
+                fig_t.update_xaxes(title="Aporte a la incertidumbre total (%)", ticksuffix="%")
+                mostrar_fig(fig_t)
+                top = df_sens.iloc[-1]
+                st.caption(f"'{top['Paquete']}' explica el {fmt_num(top['Aporte'], 1)}% de la variación del plazo total. "
+                           "Afinar su estimación o reducir su riesgo es lo que más acota la incertidumbre del proyecto.")
+
+        # ---------------- Tabla de confianza ----------------
+        st.write("")
+        seccion("Tabla de confianza", "Qué plazo, fecha y presupuesto corresponde a cada nivel de confianza.")
+        tp = tabla_percentiles(dias, costos, fecha_inicio, habiles, perc)
+        df_tp = pd.DataFrame([{
+            "Confianza": r["Confianza"],
+            "Días": fmt_num(r["Días"], 1),
+            "Fecha de término": r["Fecha"].strftime("%d/%m/%Y"),
+            "Presupuesto": fmt_money(r["Costo"]),
+            "Cómo leerlo": f"{r['p']}% de los escenarios termina en {fmt_num(r['Días'], 1)} días o menos",
+        } for r in tp])
+        objetivo = f"P{perc}"
+        sty = df_tp.style.apply(
+            lambda fila: [f"background-color: {rgba(T['accent'], 0.16)}; font-weight: 600"
+                          if fila["Confianza"] == objetivo else "" for _ in fila], axis=1)
+        st.dataframe(sty, hide_index=True, **ANCHO)
+
+        # ---------------- Inspector y capacidad ----------------
+        st.write("")
+        col_i1, col_i2 = st.columns(2)
+        with col_i1:
+            seccion("Inspeccionar un escenario", "Revisa una iteración concreta del sorteo.")
+            atajo = st.radio("Ir a", ["Elegir número", "Más rápido", "Mediano", "Más lento"], horizontal=True,
+                             key="mc_atajo", label_visibility="collapsed")
+            if atajo == "Elegir número":
+                it = st.slider("Iteración", 1, len(dias), min(100, len(dias)), key="mc_slider_iter")
+            else:
+                orden = np.argsort(dias)
+                it = int({"Más rápido": orden[0], "Mediano": orden[len(orden) // 2], "Más lento": orden[-1]}[atajo]) + 1
+            d_it, c_it = float(dias[it - 1]), float(costos[it - 1])
+            pct_rank = (dias <= d_it).mean() * 100
+            st.markdown(caja_filas(f"Escenario #{fmt_num(it)} de {fmt_num(len(dias))}", [
+                ("Duración", f"{fmt_num(d_it, 1)} días"),
+                ("Costo", fmt_money(c_it)),
+                ("Fecha de término", fecha_fin(fecha_inicio, d_it, habiles).strftime("%d/%m/%Y")),
+                ("Posición", f"más lento que el {fmt_num(pct_rank, 0)}% de los escenarios"),
+                ("Plazo", pill("Cumple", "ok") if d_it <= dias_meta else pill("Atrasado", "bad")),
+                ("Presupuesto", pill("Dentro", "ok") if c_it <= costo_meta else pill("Sobrecosto", "bad")),
+            ]), unsafe_allow_html=True)
+
+        with col_i2:
+            seccion("Capacidad anual del equipo", "Cuántos proyectos de este tamaño caben en un año.")
+            dias_ano = 250 if habiles else 365
+            cap50 = dias_ano / met["p50"] if met["p50"] > 0 else 0
+            capt = dias_ano / met["pt"] if met["pt"] > 0 else 0
+            st.markdown(caja_filas(f"Base: {dias_ano} {'días hábiles' if habiles else 'días corridos'} por año", [
+                ("Capacidad mediana (P50)", f"{fmt_num(cap50, 1)} proyectos/año"),
+                (f"Capacidad segura (P{perc})", f"{fmt_num(capt, 1)} proyectos/año"),
+                ("Proyectos completos garantizados", f"{int(capt)} por año"),
+                ("Riesgo asumido al planificar con P" + str(perc), f"{100 - perc}%"),
+            ]), unsafe_allow_html=True)
+
+        # ---------------- Escenarios extremos ----------------
+        st.write("")
+        df_sims = pd.DataFrame({
+            "Iteración": np.arange(1, len(dias) + 1),
+            "Duración (días)": np.round(dias, 1),
+            "Costo ($)": np.round(costos, 0),
+            "Cumple plazo": ok_t,
+            "Cumple presupuesto": ok_c,
+        })
+        with st.expander("Ver escenarios extremos y datos crudos", expanded=False):
+            t1, t2 = st.columns(2)
+            cfg_cols = {"Costo ($)": st.column_config.NumberColumn(format="$%d"),
+                        "Cumple plazo": st.column_config.CheckboxColumn(),
+                        "Cumple presupuesto": st.column_config.CheckboxColumn()}
+            t1.markdown("**10 escenarios más rápidos**")
+            t1.dataframe(df_sims.nsmallest(10, "Duración (días)"), hide_index=True, column_config=cfg_cols, **ANCHO)
+            t2.markdown("**10 escenarios más lentos**")
+            t2.dataframe(df_sims.nlargest(10, "Duración (días)"), hide_index=True, column_config=cfg_cols, **ANCHO)
+
+        # ---------------- Exportación ----------------
+        st.divider()
+        seccion("Exportar la simulación",
+                "El Excel incluye resumen ejecutivo, tabla de percentiles, histograma y curva S nativos, y todas las iteraciones.")
+        e1, e2 = st.columns(2)
+        with st.spinner("Preparando Excel…"):
+            excel_mc = generar_excel_montecarlo(dias, costos, cfg)
+        e1.download_button("📊 Reporte Monte Carlo en Excel (.xlsx)", excel_mc,
+                           f"MonteCarlo_{slug(st.session_state.nombre_proj)}.xlsx", XLSX, **ANCHO)
+        e2.download_button("📄 Iteraciones en CSV (.csv)", df_sims.to_csv(index=False).encode("utf-8"),
+                           f"MonteCarlo_iteraciones_{slug(st.session_state.nombre_proj)}.csv", "text/csv", **ANCHO)
+
+# ---------------------------------------------------------------------
+# TAB 5: FLUJOS
+# ---------------------------------------------------------------------
+with tab5:
+    seccion("Diagramas de flujo y secuencia", "Parte de una plantilla y edítala; la vista previa se actualiza sola.")
+    c_f1, c_f2 = st.columns([1, 1.3])
+    with c_f1:
+        st.selectbox("Plantilla", options=list(PLANTILLAS_FLUJO.keys()), key="select_tipo_flujo",
+                     on_change=cambiar_plantilla_flujo)
+        if "txt_flujo_code" not in st.session_state:
+            st.session_state.txt_flujo_code = st.session_state.flujo_codigo
+        st.text_area("Código del diagrama", height=240, key="txt_flujo_code")
+        st.session_state.flujo_codigo = st.session_state.txt_flujo_code
+        st.download_button("📌 Descargar diagrama de flujo (.mmd)", st.session_state.flujo_codigo.encode("utf-8"),
+                           f"Flujo_Secuencia_{slug(st.session_state.nombre_proj)}.mmd", "text/plain", **ANCHO)
+    with c_f2:
+        st_mermaid(st.session_state.flujo_codigo)
+
+# ---------------------------------------------------------------------
+# TAB 6: EDT (WBS)
+# ---------------------------------------------------------------------
 with tab6:
-    st.markdown("### Estructura de Desglose de Trabajo (EDT / WBS)")
-    
-    with st.expander("📖 **Guía Rápida EDT: Fases, Agrupaciones y Documentos**", expanded=False):
+    seccion("Estructura de desglose de trabajo (EDT / WBS)",
+            "Proyecto → fases → subfases → paquetes de trabajo con horas, costo y documentos. "
+            "Estos paquetes también pueden alimentar la simulación Monte Carlo.")
+
+    with st.expander("Guía rápida de niveles", expanded=False):
         st.markdown(f"""
-        **Estructura Jerárquica del Proyecto:**
-        * 📦 **Proyecto (Nivel 0):** *{st.session_state.nombre_proj}*
-        * 📂 **Fase Principal (Nivel 1):** Ej: *Fase 1: Preparación*, *Fase 2: Manual*.
-        * 📁 **Subfase / Grupo (Nivel 2):** Agrupación secundaria opcional (Ej: *Aerosol*, *Documentación*).
-        * 📄 **Paquete de Trabajo (Nivel 3):** Tarea entregable con **Horas**, **Costo** y **Documentos**.
+- 📦 **Proyecto (nivel 0):** *{st.session_state.nombre_proj}*
+- 📂 **Fase principal (nivel 1):** p. ej. *Fase 1: Preparación*.
+- 📁 **Subfase / grupo (nivel 2):** agrupación opcional (p. ej. *Aerosol*, *Documentación*).
+- 📄 **Paquete de trabajo (nivel 3):** entregable con **horas**, **costo** y **documentos**.
         """)
 
     df_edt = pd.DataFrame(st.session_state.edt_list)
-    
-    # MÉTRICAS GLOBALES
     if not df_edt.empty:
-        total_horas = df_edt["Horas"].sum()
-        total_costo = df_edt["Costo"].sum() if "Costo" in df_edt.columns else 0
-        total_paquetes = len(df_edt)
-        total_fases = df_edt["Fase"].nunique()
+        total_horas, total_costo = df_edt["Horas"].sum(), df_edt["Costo"].sum()
+        total_paquetes, total_fases = len(df_edt), df_edt["Fase"].nunique()
     else:
-        total_horas = 0
-        total_costo = 0
-        total_paquetes = 0
-        total_fases = 0
+        total_horas = total_costo = total_paquetes = total_fases = 0
 
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("⏳ Total Horas", f"{total_horas:.0f} hrs")
-    m2.metric("💰 Costo Total Estimado", f"${total_costo:,.0f}")
-    m3.metric("📄 Paquetes de Trabajo", total_paquetes)
-    m4.metric("📂 Fases Principales", total_fases)
-    
-    st.write("---")
-    
-    # DIAGRAMA DE ÁRBOL JERÁRQUICO (WBS VISUAL EN MERMAID)
-    st.markdown("#### 🌳 Diagrama Jerárquico Multinivel (EDT)")
+    kpi(m1, "Horas totales", f"{fmt_num(total_horas)} h", f"≈ {fmt_num(total_horas / 8, 1)} días de 8 h")
+    kpi(m2, "Costo total estimado", fmt_money(total_costo), "", T["accent2"])
+    kpi(m3, "Paquetes de trabajo", fmt_num(total_paquetes), "", T["sub"])
+    kpi(m4, "Fases principales", fmt_num(total_fases), "", T["sub"])
+
+    st.write("")
+    seccion("Diagrama jerárquico")
     if not df_edt.empty:
-        mermaid_edt_code = generar_mermaid_edt(st.session_state.edt_list, st.session_state.nombre_proj)
-        st_mermaid(mermaid_edt_code)
+        st_mermaid(generar_mermaid_edt(st.session_state.edt_list, st.session_state.nombre_proj))
     else:
-        st.info("No hay paquetes agregados para mostrar el árbol jerárquico.")
+        st.info("Agrega un paquete de trabajo para ver el árbol jerárquico.")
 
-    st.write("---")
-
-    # DISTRIBUCIÓN DE HORAS Y COSTOS Y FORMULARIO
+    st.divider()
     col_graph, col_manage = st.columns([1.1, 1])
-
     with col_graph:
-        st.markdown("#### 📊 Distribución de Recursos por Fase")
-        if not df_edt.empty and "Costo" in df_edt.columns:
+        seccion("Distribución de recursos por fase")
+        if not df_edt.empty:
             df_fases = df_edt.groupby("Fase", as_index=False)[["Horas", "Costo"]].sum()
-            
-            tipo_metric = st.radio("Métrica visualizada", ["Horas", "Costo"], horizontal=True, key="rad_edt_metric")
-            
-            fig_donut = px.pie(
-                df_fases, 
-                names='Fase', 
-                values=tipo_metric, 
-                hole=0.4,
-                color_discrete_sequence=px.colors.qualitative.Dark24
-            )
-            fig_donut.update_layout(
-                paper_bgcolor='rgba(0,0,0,0)', 
-                plot_bgcolor='rgba(0,0,0,0)', 
-                font_color=graph_text,
-                margin=dict(l=10, r=10, t=30, b=10)
-            )
-            st.plotly_chart(fig_donut, use_container_width=True)
+            tipo_metric = st.radio("Métrica", ["Horas", "Costo"], horizontal=True, key="rad_edt_metric")
+            fig_donut = px.pie(df_fases, names="Fase", values=tipo_metric, hole=0.55,
+                               color_discrete_sequence=[T["accent"], T["accent2"], T["warn"], T["ok"], T["bad"], T["sub"]])
+            fig_donut.update_traces(textinfo="percent", hovertemplate="%{label}<br>%{value:,.0f}<extra></extra>")
+            estilo_fig(fig_donut, height=360)
+            mostrar_fig(fig_donut)
         else:
             st.info("Agrega datos para generar el gráfico de distribución.")
 
     with col_manage:
-        st.markdown("#### ➕ Agregar Paquete de Trabajo / Tarea")
+        seccion("Agregar paquete de trabajo")
         with st.form("form_add_edt_multi", clear_on_submit=True):
-            fase_in = st.text_input("Fase Principal", placeholder="Ej: Fase 1: Preparación")
-            subfase_in = st.text_input("Subfase / Grupo (Opcional)", placeholder="Ej: Pintura Aerosol")
-            paquete_in = st.text_input("Paquete de Trabajo / Tarea", placeholder="Ej: Pintar arbusto")
-            
+            fase_in = st.text_input("Fase principal", placeholder="Ej: Fase 1: Preparación")
+            subfase_in = st.text_input("Subfase / grupo (opcional)", placeholder="Ej: Pintura aerosol")
+            paquete_in = st.text_input("Paquete de trabajo / tarea", placeholder="Ej: Pintar arbusto")
             c_h, c_c = st.columns(2)
-            horas_in = c_h.number_input("Horas Estimadas", min_value=0, value=4, step=1)
-            costo_in = c_c.number_input("Costo Estimado ($)", min_value=0, value=15000, step=1000)
-            
-            doc_in = st.text_input("Documentos / Referencias", placeholder="Ej: Ficha Técnica Aerosol")
-            
-            btn_add_edt = st.form_submit_button("Añadir Paquete a EDT", use_container_width=True)
-            if btn_add_edt:
+            horas_in = c_h.number_input("Horas estimadas", min_value=0, value=4, step=1)
+            costo_in = c_c.number_input("Costo estimado ($)", min_value=0, value=15000, step=1000)
+            doc_in = st.text_input("Documentos / referencias", placeholder="Ej: Ficha técnica aerosol")
+            if st.form_submit_button("Añadir paquete a la EDT", **ANCHO):
                 if fase_in.strip() and paquete_in.strip():
                     st.session_state.edt_list.append({
-                        "Fase": fase_in.strip(),
-                        "Subfase": subfase_in.strip(),
-                        "Paquete": paquete_in.strip(),
-                        "Horas": float(horas_in),
-                        "Costo": float(costo_in),
-                        "Documentos": doc_in.strip()
-                    })
+                        "Fase": fase_in.strip(), "Subfase": subfase_in.strip(), "Paquete": paquete_in.strip(),
+                        "Horas": float(horas_in), "Costo": float(costo_in), "Documentos": doc_in.strip()})
                     st.rerun()
                 else:
-                    st.error("Debes completar al menos la Fase Principal y el Paquete de Trabajo.")
+                    st.error("Completa al menos la fase principal y el paquete de trabajo.")
 
-    st.write("---")
-    st.markdown("#### 📝 Lista Dinámica y Edición de EDT")
-    
+    st.divider()
+    seccion("Editar paquetes")
     if not st.session_state.edt_list:
-        st.info("La estructura de desglose de trabajo está vacía.")
+        st.info("La EDT está vacía. Usa el formulario de arriba para agregar el primer paquete.")
     else:
-        edt_del_idx = None
-        
-        # Cabecera de la tabla editable
-        h1, h2, h3, h4, h5, h6, h7 = st.columns([2, 1.8, 2.2, 1, 1.2, 1.8, 0.6])
-        h1.markdown("**Fase**")
-        h2.markdown("**Subfase**")
-        h3.markdown("**Paquete / Tarea**")
-        h4.markdown("**Horas**")
-        h5.markdown("**Costo ($)**")
-        h6.markdown("**Documentos**")
-        h7.markdown("")
-        
+        anchos = [2, 1.8, 2.2, 1, 1.2, 1.8, 0.5]
+        cab = st.columns(anchos)
+        for c, t in zip(cab, ["Fase", "Subfase", "Paquete / tarea", "Horas", "Costo ($)", "Documentos", ""]):
+            c.markdown(f"**{t}**")
+        borrar = None
         for i, item in enumerate(st.session_state.edt_list):
-            col_f, col_sf, col_p, col_h, col_c, col_d, col_del = st.columns([2, 1.8, 2.2, 1, 1.2, 1.8, 0.6])
-            
-            f_val = col_f.text_input(f"f_{i}", value=item.get("Fase", ""), key=f"edt_fase_{i}", label_visibility="collapsed")
-            sf_val = col_sf.text_input(f"sf_{i}", value=item.get("Subfase", ""), key=f"edt_sfase_{i}", label_visibility="collapsed")
-            p_val = col_p.text_input(f"p_{i}", value=item.get("Paquete", ""), key=f"edt_pkg_{i}", label_visibility="collapsed")
-            h_val = col_h.number_input(f"h_{i}", value=float(item.get("Horas", 0)), min_value=0.0, step=1.0, key=f"edt_hrs_{i}", label_visibility="collapsed")
-            c_val = col_c.number_input(f"c_{i}", value=float(item.get("Costo", 0)), min_value=0.0, step=1000.0, key=f"edt_cost_{i}", label_visibility="collapsed")
-            doc_val = col_d.text_input(f"d_{i}", value=item.get("Documentos", ""), key=f"edt_doc_{i}", label_visibility="collapsed")
-            
-            st.session_state.edt_list[i]["Fase"] = f_val
-            st.session_state.edt_list[i]["Subfase"] = sf_val
-            st.session_state.edt_list[i]["Paquete"] = p_val
-            st.session_state.edt_list[i]["Horas"] = h_val
-            st.session_state.edt_list[i]["Costo"] = c_val
-            st.session_state.edt_list[i]["Documentos"] = doc_val
-            
-            if col_del.button("🗑️", key=f"del_edt_{i}"):
-                edt_del_idx = i
-
-        if edt_del_idx is not None:
-            st.session_state.edt_list.pop(edt_del_idx)
+            cs = st.columns(anchos)
+            item["Fase"] = cs[0].text_input(f"f_{i}", value=item.get("Fase", ""), key=f"edt_fase_{i}", label_visibility="collapsed")
+            item["Subfase"] = cs[1].text_input(f"sf_{i}", value=item.get("Subfase", ""), key=f"edt_sfase_{i}", label_visibility="collapsed")
+            item["Paquete"] = cs[2].text_input(f"p_{i}", value=item.get("Paquete", ""), key=f"edt_pkg_{i}", label_visibility="collapsed")
+            item["Horas"] = cs[3].number_input(f"h_{i}", value=float(item.get("Horas", 0)), min_value=0.0, step=1.0,
+                                               key=f"edt_hrs_{i}", label_visibility="collapsed")
+            item["Costo"] = cs[4].number_input(f"c_{i}", value=float(item.get("Costo", 0)), min_value=0.0, step=1000.0,
+                                               key=f"edt_cost_{i}", label_visibility="collapsed")
+            item["Documentos"] = cs[5].text_input(f"d_{i}", value=item.get("Documentos", ""), key=f"edt_doc_{i}", label_visibility="collapsed")
+            if cs[6].button("🗑️", key=f"del_edt_{i}", help="Eliminar paquete"):
+                borrar = i
+        if borrar is not None:
+            st.session_state.edt_list.pop(borrar)
+            limpiar_widgets("edt_fase_", "edt_sfase_", "edt_pkg_", "edt_hrs_", "edt_cost_", "edt_doc_")
             st.rerun()
 
-    # DESCARGA INDIVIDUAL - TAB 6
-    st.write("---")
-    st.markdown("#### 📥 Exportar Punto 6: Estructura EDT (WBS)")
+    st.divider()
+    seccion("Exportar EDT")
     c_dedt1, c_dedt2 = st.columns(2)
-    with c_dedt1:
-        st.download_button(
-            label="📊 Descargar EDT en Excel (.xlsx)",
-            data=generar_excel_edt(),
-            file_name=f"EDT_{st.session_state.nombre_proj.replace(' ', '_')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
-        )
-    with c_dedt2:
-        df_e_exp = pd.DataFrame(st.session_state.edt_list)
-        st.download_button(
-            label="📄 Descargar EDT en CSV (.csv)",
-            data=df_e_exp.to_csv(index=False).encode('utf-8'),
-            file_name=f"EDT_{st.session_state.nombre_proj.replace(' ', '_')}.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
+    c_dedt1.download_button("📊 EDT en Excel (.xlsx)", generar_excel_edt(),
+                            f"EDT_{slug(st.session_state.nombre_proj)}.xlsx", XLSX, **ANCHO)
+    c_dedt2.download_button("📄 EDT en CSV (.csv)", pd.DataFrame(st.session_state.edt_list).to_csv(index=False).encode("utf-8"),
+                            f"EDT_{slug(st.session_state.nombre_proj)}.csv", "text/csv", **ANCHO)
 
-# ------------------------------------------
+# ---------------------------------------------------------------------
 # TAB 7: RIESGOS
-# ------------------------------------------
+# ---------------------------------------------------------------------
 with tab7:
-    st.markdown("### Matriz de Riesgos (5x5 Minimalista)")
+    seccion("Matriz de riesgos 5×5", "Severidad = probabilidad × impacto. Los riesgos sobre 15 son críticos.")
 
     df_r = pd.DataFrame(st.session_state.riesgos_list)
-    
     if not df_r.empty:
         df_r["Severidad"] = df_r["Probabilidad"] * df_r["Impacto"]
         df_r["Nivel"] = df_r["Severidad"].apply(clasificar_riesgo)
     else:
         df_r = pd.DataFrame(columns=["Riesgo", "Probabilidad", "Impacto", "Severidad", "Nivel"])
 
-    # MÉTRICAS RÁPIDAS
     r_total = len(df_r)
-    r_criticos = len(df_r[df_r["Severidad"] >= 12]) if not df_r.empty else 0
-    r_prom = df_r["Severidad"].mean() if not df_r.empty else 0.0
-
+    r_criticos = int((df_r["Severidad"] >= 12).sum()) if not df_r.empty else 0
+    r_prom = float(df_r["Severidad"].mean()) if not df_r.empty else 0.0
     mr1, mr2, mr3 = st.columns(3)
-    mr1.metric("⚠ Total de Riesgos", r_total)
-    mr2.metric("🔥 Riesgos Altos / Críticos", r_criticos)
-    mr3.metric("📊 Severidad Promedio", f"{r_prom:.1f} / 25")
-
-    st.write("---")
-
-    col_matriz, col_form = st.columns([1.3, 1])
-
-    with col_matriz:
-        st.markdown("#### 🗺️ Mapa de Calor (Probabilidad vs Impacto)")
-        
-        # Construir matriz de fondo 5x5
-        z_grid = [[i * j for j in range(1, 6)] for i in range(1, 6)]
-
-        fig_matrix = go.Figure()
-
-        # Fondo codificado por nivel de riesgo
-        fig_matrix.add_trace(go.Heatmap(
-            z=z_grid,
-            x=[1, 2, 3, 4, 5],
-            y=[1, 2, 3, 4, 5],
-            colorscale=[
-                [0.0, "rgba(46, 125, 50, 0.35)"],   # Verde (Bajo)
-                [0.35, "rgba(251, 192, 45, 0.35)"], # Amarillo (Medio)
-                [0.6, "rgba(245, 124, 0, 0.35)"],   # Naranja (Alto)
-                [1.0, "rgba(211, 47, 47, 0.4)"]     # Rojo (Crítico)
-            ],
-            showscale=False,
-            hoverinfo="skip"
-        ))
-
-        # Puntos de riesgo
-        if not df_r.empty:
-            fig_matrix.add_trace(go.Scatter(
-                x=df_r["Probabilidad"],
-                y=df_r["Impacto"],
-                mode="markers+text",
-                text=df_r["Riesgo"],
-                textposition="top center",
-                textfont=dict(color=graph_text, size=11),
-                marker=dict(
-                    size=16,
-                    color=df_r["Severidad"],
-                    colorscale="Reds",
-                    line=dict(width=1.5, color="#ffffff")
-                ),
-                hovertemplate="<b>%{text}</b><br>Probabilidad: %{x}<br>Impacto: %{y}<br>Severidad: %{marker.color}<extra></extra>"
-            ))
-
-        fig_matrix.update_layout(
-            xaxis=dict(title="Probabilidad (1-5)", range=[0.5, 5.5], dtick=1, gridcolor=grid_color, zeroline=False),
-            yaxis=dict(title="Impacto (1-5)", range=[0.5, 5.5], dtick=1, gridcolor=grid_color, zeroline=False),
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            font_color=graph_text,
-            margin=dict(l=30, r=20, t=10, b=30),
-            height=380
-        )
-
-        st.plotly_chart(fig_matrix, use_container_width=True)
-
-    with col_form:
-        st.markdown("#### ➕ Registrar Nuevo Riesgo")
-        with st.form("form_add_riesgo", clear_on_submit=True):
-            r_nombre = st.text_input("Nombre / Descripción del Riesgo", placeholder="Ej: Retraso en entregables")
-            
-            c_p, c_i = st.columns(2)
-            r_prob = c_p.slider("Probabilidad (1 a 5)", min_value=1, max_value=5, value=3)
-            r_imp = c_i.slider("Impacto (1 a 5)", min_value=1, max_value=5, value=3)
-
-            btn_add_r = st.form_submit_button("Agregar Riesgo", use_container_width=True)
-            if btn_add_r:
-                if r_nombre.strip():
-                    st.session_state.riesgos_list.append({
-                        "Riesgo": r_nombre.strip(),
-                        "Probabilidad": int(r_prob),
-                        "Impacto": int(r_imp)
-                    })
-                    st.rerun()
-                else:
-                    st.error("Escribe un nombre para el riesgo.")
-
-    st.write("---")
-    st.markdown("#### 📝 Inventario y Edición de Riesgos")
-
-    if not st.session_state.riesgos_list:
-        st.info("No hay riesgos registrados.")
-    else:
-        r_del_idx = None
-        
-        # Cabecera
-        rh1, rh2, rh3, rh4, rh5, rh6 = st.columns([3, 1.2, 1.2, 1.2, 1.5, 0.6])
-        rh1.markdown("**Riesgo**")
-        rh2.markdown("**Probabilidad**")
-        rh3.markdown("**Impacto**")
-        rh4.markdown("**Severidad**")
-        rh5.markdown("**Nivel**")
-        rh6.markdown("")
-
-        for idx, item in enumerate(st.session_state.riesgos_list):
-            rc1, rc2, rc3, rc4, rc5, rc6 = st.columns([3, 1.2, 1.2, 1.2, 1.5, 0.6])
-            
-            r_txt = rc1.text_input(f"rt_{idx}", value=item["Riesgo"], key=f"r_name_{idx}", label_visibility="collapsed")
-            r_p_val = rc2.number_input(f"rp_{idx}", value=int(item["Probabilidad"]), min_value=1, max_value=5, key=f"r_p_{idx}", label_visibility="collapsed")
-            r_i_val = rc3.number_input(f"ri_{idx}", value=int(item["Impacto"]), min_value=1, max_value=5, key=f"r_i_{idx}", label_visibility="collapsed")
-            
-            sev_val = r_p_val * r_i_val
-            nivel_str = clasificar_riesgo(sev_val)
-            
-            rc4.markdown(f"**{sev_val}**")
-            rc5.markdown(nivel_str)
-
-            st.session_state.riesgos_list[idx]["Riesgo"] = r_txt
-            st.session_state.riesgos_list[idx]["Probabilidad"] = r_p_val
-            st.session_state.riesgos_list[idx]["Impacto"] = r_i_val
-
-            if rc6.button("🗑️", key=f"del_r_{idx}"):
-                r_del_idx = idx
-
-        if r_del_idx is not None:
-            st.session_state.riesgos_list.pop(r_del_idx)
-            st.rerun()
-
-    # DESCARGA INDIVIDUAL - TAB 7
-    st.write("---")
-    st.markdown("#### 📥 Exportar Punto 7: Matriz de Riesgos")
-    c_dr1, _ = st.columns([1, 1])
-    with c_dr1:
-        st.download_button(
-            label="📊 Descargar Matriz de Riesgos en Excel (.xlsx)",
-            data=generar_excel_riesgos(),
-            file_name=f"Matriz_Riesgos_{st.session_state.nombre_proj.replace(' ', '_')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
-        )
-
-# ------------------------------------------
-# TAB 8: REPORTE MEMENTOMORI
-# ------------------------------------------
-with tab8:
-    st.markdown("### 📜 Reporte MementoMori (Análisis de Puntos Críticos)")
-    st.write(
-        "Este reporte genera un documento en formato Word (.docx) que consolida un análisis crítico y exhaustivo de todos los componentes "
-        "del proyecto: requisitos, diagramas de flujo/arquitectura, estimación Monte Carlo, EDT y matriz de riesgos."
-    )
-    
-    col_m1, col_m2 = st.columns(2)
-    with col_m1:
-        st.session_state.integrantes = st.text_input("Integrantes / Responsables", st.session_state.integrantes, key="mem_tab_integrantes")
-    with col_m2:
-        st.session_state.nombre_proj = st.text_input("Nombre del Proyecto", st.session_state.nombre_proj, key="mem_tab_nombre")
-
-    st.markdown("#### 🔍 Cobertura del Análisis MementoMori:")
-    st.markdown("""
-    * **1. Introducción y Alcance:** Evaluación de viabilidad, alineación estratégica y prevención de Scope Creep.
-    * **2. Requisitos (RF / RNF):** Análisis de vulnerabilidad en los Requisitos No Funcionales (latencia, seguridad).
-    * **3. Arquitectura y Flujos:** Interpretación del acoplamiento de componentes y puntos de fallo en la secuencia de usuario.
-    * **4. Gestión Kanban:** Identificación del trabajo en proceso (WIP) y cuellos de botella.
-    * **5. EDT (WBS):** Evaluación de actividades críticas con alto impacto en costo y horas.
-    * **6. Simulación Monte Carlo:** Diagnóstico de niveles de confianza (P85 / P95) y análisis de dispersión pesimista.
-    * **7. Matriz de Riesgos:** Filosofía MementoMori ('Planificar anticipadamente ante fallos') y mitigación activa.
-    """)
-
-    word_mementomori_bytes = generar_word_mementomori()
+    kpi(mr1, "Riesgos registrados", fmt_num(r_total), "", T["sub"])
+    kpi(mr2, "Riesgos altos o críticos", fmt_num(r_criticos), "Severidad ≥ 12", T["bad"])
+    kpi(mr3, "Severidad promedio", f"{fmt_num(r_prom, 1)} / 25", "", T["warn"])
 
     st.write("")
+    col_matriz, col_form = st.columns([1.3, 1])
+    with col_matriz:
+        seccion("Mapa de calor")
+        z_grid = [[i * j for i in range(1, 6)] for j in range(1, 6)]
+        fig_matrix = go.Figure(go.Heatmap(
+            z=z_grid, x=[1, 2, 3, 4, 5], y=[1, 2, 3, 4, 5], showscale=False, hoverinfo="skip",
+            text=z_grid, texttemplate="%{text}", textfont=dict(color=rgba(T["text"], 0.35), size=11),
+            colorscale=[[0.0, rgba(T["ok"], 0.30)], [0.35, rgba(T["warn"], 0.30)],
+                        [0.6, "rgba(245,124,0,0.35)"], [1.0, rgba(T["bad"], 0.45)]]))
+        if not df_r.empty:
+            fig_matrix.add_trace(go.Scatter(
+                x=df_r["Probabilidad"], y=df_r["Impacto"], mode="markers+text", text=df_r["Riesgo"],
+                textposition="top center", textfont=dict(color=T["text"], size=11),
+                marker=dict(size=16, color=T["text"], line=dict(width=2, color=T["card"])),
+                customdata=df_r["Severidad"],
+                hovertemplate="<b>%{text}</b><br>Probabilidad: %{x}<br>Impacto: %{y}<br>Severidad: %{customdata}<extra></extra>"))
+        estilo_fig(fig_matrix, height=420, showlegend=False)
+        fig_matrix.update_xaxes(title="Probabilidad (1-5)", range=[0.5, 5.5], dtick=1, showgrid=False)
+        fig_matrix.update_yaxes(title="Impacto (1-5)", range=[0.5, 5.5], dtick=1, showgrid=False)
+        mostrar_fig(fig_matrix)
+
+    with col_form:
+        seccion("Registrar riesgo")
+        with st.form("form_add_riesgo", clear_on_submit=True):
+            r_nombre = st.text_input("Descripción del riesgo", placeholder="Ej: Retraso en entregables")
+            c_p, c_i = st.columns(2)
+            r_prob = c_p.slider("Probabilidad", 1, 5, 3)
+            r_imp = c_i.slider("Impacto", 1, 5, 3)
+            if st.form_submit_button("Agregar riesgo", **ANCHO):
+                if r_nombre.strip():
+                    st.session_state.riesgos_list.append({"Riesgo": r_nombre.strip(), "Probabilidad": int(r_prob), "Impacto": int(r_imp)})
+                    st.rerun()
+                else:
+                    st.error("Escribe una descripción para el riesgo.")
+
+    st.divider()
+    seccion("Inventario de riesgos")
+    if not st.session_state.riesgos_list:
+        st.info("No hay riesgos. Registra el primero con el formulario de arriba.")
+    else:
+        anchos_r = [3, 1.2, 1.2, 1, 1.4, 0.5]
+        cab = st.columns(anchos_r)
+        for c, t in zip(cab, ["Riesgo", "Probabilidad", "Impacto", "Severidad", "Nivel", ""]):
+            c.markdown(f"**{t}**")
+        borrar = None
+        for idx, item in enumerate(st.session_state.riesgos_list):
+            rc = st.columns(anchos_r)
+            item["Riesgo"] = rc[0].text_input(f"rt_{idx}", value=item["Riesgo"], key=f"r_name_{idx}", label_visibility="collapsed")
+            item["Probabilidad"] = rc[1].number_input(f"rp_{idx}", value=int(item["Probabilidad"]), min_value=1, max_value=5,
+                                                      key=f"r_p_{idx}", label_visibility="collapsed")
+            item["Impacto"] = rc[2].number_input(f"ri_{idx}", value=int(item["Impacto"]), min_value=1, max_value=5,
+                                                 key=f"r_i_{idx}", label_visibility="collapsed")
+            sev = item["Probabilidad"] * item["Impacto"]
+            rc[3].markdown(f"**{sev}**")
+            rc[4].markdown(clasificar_riesgo(sev))
+            if rc[5].button("🗑️", key=f"del_r_{idx}", help="Eliminar riesgo"):
+                borrar = idx
+        if borrar is not None:
+            st.session_state.riesgos_list.pop(borrar)
+            limpiar_widgets("r_name_", "r_p_", "r_i_")
+            st.rerun()
+
+    st.divider()
+    seccion("Exportar matriz")
+    c_dr1, _ = st.columns(2)
+    c_dr1.download_button("📊 Matriz de riesgos en Excel (.xlsx)", generar_excel_riesgos(),
+                          f"Matriz_Riesgos_{slug(st.session_state.nombre_proj)}.xlsx", XLSX, **ANCHO)
+
+# ---------------------------------------------------------------------
+# TAB 8: REPORTE MEMENTO MORI
+# ---------------------------------------------------------------------
+with tab8:
+    seccion("Reporte Memento Mori",
+            "Documento Word con el análisis crítico de todos los componentes del proyecto. "
+            "Incluye los resultados reales de la simulación Monte Carlo configurada.")
+    col_m1, col_m2 = st.columns(2)
+    st.session_state.integrantes = col_m1.text_input("Integrantes / responsables", st.session_state.integrantes, key="mem_tab_integrantes")
+    st.session_state.nombre_proj = col_m2.text_input("Nombre del proyecto", st.session_state.nombre_proj, key="mem_tab_nombre")
+
+    st.markdown("""
+**Contenido del reporte**
+1. **Introducción y alcance:** viabilidad, alineación estratégica y prevención de scope creep.
+2. **Requisitos (RF / RNF):** vulnerabilidad en los requisitos no funcionales.
+3. **Arquitectura y flujos:** acoplamiento de componentes y puntos de fallo.
+4. **Gestión Kanban:** trabajo en proceso (WIP) y cuellos de botella.
+5. **EDT (WBS):** actividades críticas por costo y horas.
+6. **Simulación Monte Carlo:** niveles de confianza, reservas de contingencia y veredicto.
+7. **Matriz de riesgos:** planificación anticipada ante fallos y mitigación.
+8. **Conclusiones y recomendaciones.**
+    """)
+    if MC_ACTUAL is None:
+        st.warning("La simulación Monte Carlo tiene parámetros inválidos; el reporte lo indicará en la sección 6.")
+
     col_btn_center, _ = st.columns([2, 1])
-    with col_btn_center:
-        st.download_button(
-            label="📄 Descargar Reporte MementoMori (.docx)",
-            data=word_mementomori_bytes,
-            file_name=f"Reporte_MementoMori_{st.session_state.nombre_proj.replace(' ', '_')}.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            use_container_width=True
-        )
+    col_btn_center.download_button("📄 Descargar reporte Memento Mori (.docx)", generar_word_mementomori(),
+                                   f"Reporte_MementoMori_{slug(st.session_state.nombre_proj)}.docx", DOCX, **ANCHO)
 
-# ------------------------------------------
-# TAB 9: DESCARGA FULL
-# ------------------------------------------
+# ---------------------------------------------------------------------
+# TAB 9: DESCARGA COMPLETA
+# ---------------------------------------------------------------------
 with tab_full:
-    st.markdown("### 📦 Exportación General Consolidada")
-    st.write("Descarga un archivo ZIP con todos los entregables generados (Reporte MementoMori, ERS Word, Excel y CSVs).")
-    
-    word_doc = generar_word_ers()
-    word_mementomori = generar_word_mementomori()
-    excel_doc = generar_excel_estilizado()
-    
+    seccion("Exportación consolidada",
+            "Un archivo ZIP con todos los entregables: reporte Memento Mori, ERS, matrices en Excel, "
+            "reporte Monte Carlo y CSVs.")
+    nombre_s = slug(st.session_state.nombre_proj)
     zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-        zip_file.writestr(f"Reporte_MementoMori_{st.session_state.nombre_proj}.docx", word_mementomori)
-        zip_file.writestr(f"ERS_{st.session_state.nombre_proj}.docx", word_doc)
-        zip_file.writestr(f"Matrices_{st.session_state.nombre_proj}.xlsx", excel_doc)
-        
-        df_kanban = pd.DataFrame(st.session_state.kanban_tasks)
-        zip_file.writestr("Kanban_Tareas.csv", df_kanban.to_csv(index=False).encode('utf-8'))
-        
-        df_edt_export = pd.DataFrame(st.session_state.edt_list)
-        zip_file.writestr("EDT_WBS.csv", df_edt_export.to_csv(index=False).encode('utf-8'))
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(f"Reporte_MementoMori_{nombre_s}.docx", generar_word_mementomori())
+        zf.writestr(f"ERS_{nombre_s}.docx", generar_word_ers())
+        zf.writestr(f"Matrices_{nombre_s}.xlsx", generar_excel_estilizado())
+        if MC_ACTUAL:
+            zf.writestr(f"MonteCarlo_{nombre_s}.xlsx",
+                        generar_excel_montecarlo(MC_ACTUAL["res"]["dias"], MC_ACTUAL["res"]["costos"], MC_ACTUAL["cfg"]))
+        zf.writestr("Kanban_Tareas.csv", pd.DataFrame(st.session_state.kanban_tasks).to_csv(index=False).encode("utf-8"))
+        zf.writestr("EDT_WBS.csv", pd.DataFrame(st.session_state.edt_list).to_csv(index=False).encode("utf-8"))
+        zf.writestr("Mermaid/Modelado.mmd", st.session_state.modelo_mermaid)
+        zf.writestr("Mermaid/Flujo.mmd", st.session_state.flujo_codigo)
 
-    st.write("") 
     col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.download_button(
-            label="⬇ Descargar Reporte Full (.ZIP)",
-            data=zip_buffer.getvalue(),
-            file_name=f"Reporte_Full_{st.session_state.nombre_proj.replace(' ', '_')}.zip",
-            mime="application/zip",
-            use_container_width=True
-        )
+    col2.download_button("⬇ Descargar paquete completo (.zip)", zip_buffer.getvalue(),
+                         f"Reporte_Full_{nombre_s}.zip", "application/zip", **ANCHO)
+
+# =====================================================================
+# 7. BARRA LATERAL (tema y resumen)
+# =====================================================================
+with st.sidebar:
+    st.markdown("### MatrixDev")
+    st.radio("Tema visual", list(TEMAS.keys()), format_func=lambda k: TEMAS[k]["nombre"], key="tema")
+    st.divider()
+    st.markdown("**Resumen del proyecto**")
+    resumen = [
+        ("Requisitos", f"{len(st.session_state.rf_list)} RF · {len(st.session_state.rnf_list)} RNF"),
+        ("Tareas", f"{sum(t['Estado'] == 'Completado' for t in st.session_state.kanban_tasks)}/{len(st.session_state.kanban_tasks)} completadas"),
+        ("EDT", f"{fmt_num(sum(float(e.get('Horas', 0) or 0) for e in st.session_state.edt_list))} h · "
+                f"{fmt_money(sum(float(e.get('Costo', 0) or 0) for e in st.session_state.edt_list))}"),
+        ("Riesgos", f"{len(st.session_state.riesgos_list)} registrados"),
+    ]
+    if MC_ACTUAL:
+        m_ = MC_ACTUAL["met"]
+        resumen.append((f"Plazo P{MC_ACTUAL['cfg']['perc']}", f"{fmt_num(m_['pt'], 1)} días"))
+        resumen.append(("Éxito conjunto", f"{fmt_num(m_['prob_ambos'], 1)}%"))
+    st.markdown(caja_filas("Indicadores", resumen), unsafe_allow_html=True)
